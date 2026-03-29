@@ -1,0 +1,28 @@
+app:
+  name: go2rtc-stream-cleaner
+  env: production
+
+log:
+  level: info
+
+go2rtc:
+  base_url: http://127.0.0.1:1984
+  username: ""
+  password: ""
+  config_path: /config/go2rtc.yaml
+  request_timeout: 10s
+  backup_before_change: true
+
+schedule:
+  run_on_start: true
+  interval: 3h
+  confirmation_delay: 3m
+
+action:
+  dry_run: false
+
+redis:
+  addr: ""
+  password: ""
+  db: 0
+  router_ip: ""
