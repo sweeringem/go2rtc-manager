@@ -5,8 +5,8 @@ import (
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
 
-	"github.com/example/go2rtc-stream-cleaner/common"
-	"github.com/example/go2rtc-stream-cleaner/config"
+	"github.com/example/go2rtc-manager/common"
+	"github.com/example/go2rtc-manager/config"
 )
 
 type ActionActor struct {

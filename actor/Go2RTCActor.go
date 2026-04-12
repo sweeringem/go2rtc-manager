@@ -16,8 +16,8 @@ import (
 	protoactor "github.com/asynkron/protoactor-go/actor"
 	"gopkg.in/yaml.v3"
 
-	"github.com/example/go2rtc-stream-cleaner/common"
-	"github.com/example/go2rtc-stream-cleaner/config"
+	"github.com/example/go2rtc-manager/common"
+	"github.com/example/go2rtc-manager/config"
 )
 
 type Go2RTCActor struct {
@@ -49,6 +49,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 			a.logger.Error("failed to load go2rtc streams from config", "error", err)
 			ctx.Send(ctx.Parent(), &common.StreamListFetched{
 				TriggeredAt: msg.TriggeredAt,
+				RequestedBy: msg.RequestedBy,
 				Error:       err.Error(),
 			})
 			return
@@ -57,6 +58,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 		ctx.Send(ctx.Parent(), &common.StreamListFetched{
 			TriggeredAt: msg.TriggeredAt,
 			Streams:     streams,
+			RequestedBy: msg.RequestedBy,
 		})
 	case *common.CheckStreamHealth:
 		hasProducer, err := a.hasProducer(msg.StreamName)
@@ -71,6 +73,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 				TriggeredAt:  msg.TriggeredAt,
 				Attempt:      msg.Attempt,
 				CheckedAt:    time.Now(),
+				RequestedBy:  msg.RequestedBy,
 				ConfirmAfter: msg.ConfirmAfter,
 				Error:        err.Error(),
 			})
@@ -83,6 +86,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 			Attempt:      msg.Attempt,
 			HasProducer:  hasProducer,
 			CheckedAt:    time.Now(),
+			RequestedBy:  msg.RequestedBy,
 			ConfirmAfter: msg.ConfirmAfter,
 		})
 	case *common.RemoveStream:

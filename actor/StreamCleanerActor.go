@@ -6,8 +6,8 @@ import (
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
 
-	"github.com/example/go2rtc-stream-cleaner/common"
-	"github.com/example/go2rtc-stream-cleaner/config"
+	"github.com/example/go2rtc-manager/common"
+	"github.com/example/go2rtc-manager/config"
 )
 
 type StreamCleanerActor struct {
@@ -59,8 +59,11 @@ func (a *StreamCleanerActor) Receive(ctx protoactor.Context) {
 		a.aliveCount = 0
 		a.removedCount = 0
 		a.logger.Info("cleanup cycle started", "reason", msg.Reason, "triggered_at", msg.TriggeredAt)
-		ctx.Send(a.go2rtcPID, &common.FetchStreamList{TriggeredAt: msg.TriggeredAt})
+		ctx.Send(a.go2rtcPID, &common.FetchStreamList{TriggeredAt: msg.TriggeredAt, RequestedBy: ctx.Self().String()})
 	case *common.StreamListFetched:
+		if !a.running || msg.RequestedBy != ctx.Self().String() || !msg.TriggeredAt.Equal(a.triggeredAt) {
+			return
+		}
 		if msg.Error != "" {
 			a.running = false
 			a.outstanding = 0
@@ -91,8 +94,14 @@ func (a *StreamCleanerActor) Receive(ctx protoactor.Context) {
 			})
 		}
 	case *common.StreamHealthChecked:
+		if !a.running || msg.RequestedBy != ctx.Self().String() || !msg.TriggeredAt.Equal(a.triggeredAt) {
+			return
+		}
 		a.handleStreamHealth(ctx, msg)
 	case *common.StreamRemovalCompleted:
+		if !a.running || !msg.TriggeredAt.Equal(a.triggeredAt) {
+			return
+		}
 		a.handleStreamRemovalCompleted(ctx, msg)
 	default:
 	}
@@ -125,16 +134,16 @@ func (a *StreamCleanerActor) handleStreamHealth(ctx protoactor.Context, msg *com
 			"confirm_after", msg.ConfirmAfter,
 		)
 
-		go func(streamName string, triggeredAt time.Time, confirmAfter time.Duration) {
+		go func(streamName string, triggeredAt time.Time, confirmAfter time.Duration, requestedBy string) {
 			time.Sleep(confirmAfter)
 			a.rootContext.Send(a.go2rtcPID, &common.CheckStreamHealth{
 				StreamName:   streamName,
 				TriggeredAt:  triggeredAt,
 				Attempt:      2,
-				RequestedBy:  a.masterPID.String(),
+				RequestedBy:  requestedBy,
 				ConfirmAfter: confirmAfter,
 			})
-		}(msg.StreamName, msg.TriggeredAt, msg.ConfirmAfter)
+		}(msg.StreamName, msg.TriggeredAt, msg.ConfirmAfter, ctx.Self().String())
 		return
 	}
 

@@ -1,9 +1,16 @@
 app:
-  name: go2rtc-stream-cleaner
+  name: go2rtc-manager
   env: production
+  box_ip: 192.168.0.10
 
 log:
   level: info
+
+http:
+  addr: ":8080"
+  read_timeout: 5s
+  write_timeout: 15s
+  idle_timeout: 60s
 
 go2rtc:
   base_url: http://127.0.0.1:1984
@@ -15,14 +22,19 @@ go2rtc:
 
 schedule:
   run_on_start: true
-  interval: 3h
+  crons:
+    - "0 2 * * *"
+    - "0 14 * * *"
   confirmation_delay: 3m
 
 action:
   dry_run: false
 
+snapshot:
+  storage_dir: storage
+
 redis:
   addr: ""
   password: ""
   db: 0
-  router_ip: ""
+  publish_interval: 0s

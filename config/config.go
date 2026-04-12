@@ -5,25 +5,38 @@ import (
 	"strings"
 	"time"
 
+	cron "github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
+
+var cleanupCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 type Config struct {
 	App      AppConfig      `mapstructure:"app"`
 	Log      LogConfig      `mapstructure:"log"`
+	HTTP     HTTPConfig     `mapstructure:"http"`
 	Go2RTC   Go2RTCConfig   `mapstructure:"go2rtc"`
 	Schedule ScheduleConfig `mapstructure:"schedule"`
 	Action   ActionConfig   `mapstructure:"action"`
+	Snapshot SnapshotConfig `mapstructure:"snapshot"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 }
 
 type AppConfig struct {
-	Name string `mapstructure:"name"`
-	Env  string `mapstructure:"env"`
+	Name  string `mapstructure:"name"`
+	Env   string `mapstructure:"env"`
+	BoxIP string `mapstructure:"box_ip"`
 }
 
 type LogConfig struct {
 	Level string `mapstructure:"level"`
+}
+
+type HTTPConfig struct {
+	Addr         string        `mapstructure:"addr"`
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout  time.Duration `mapstructure:"idle_timeout"`
 }
 
 type Go2RTCConfig struct {
@@ -37,7 +50,7 @@ type Go2RTCConfig struct {
 
 type ScheduleConfig struct {
 	RunOnStart        bool          `mapstructure:"run_on_start"`
-	Interval          time.Duration `mapstructure:"interval"`
+	Crons             []string      `mapstructure:"crons"`
 	ConfirmationDelay time.Duration `mapstructure:"confirmation_delay"`
 }
 
@@ -45,18 +58,22 @@ type ActionConfig struct {
 	DryRun bool `mapstructure:"dry_run"`
 }
 
+type SnapshotConfig struct {
+	StorageDir string `mapstructure:"storage_dir"`
+}
+
 type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-	RouterIP string `mapstructure:"router_ip"`
+	Addr            string        `mapstructure:"addr"`
+	Password        string        `mapstructure:"password"`
+	DB              int           `mapstructure:"db"`
+	PublishInterval time.Duration `mapstructure:"publish_interval"`
 }
 
 func Load(path string) (Config, error) {
 	v := viper.New()
 	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
-	v.SetEnvPrefix("GO2RTC_CLEANER")
+	v.SetEnvPrefix("GO2RTC_MANAGER")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -71,29 +88,62 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("unmarshal config: %w", err)
 	}
 
+	if cfg.App.BoxIP == "" {
+		return Config{}, fmt.Errorf("app.box_ip is required")
+	}
+	if cfg.HTTP.Addr == "" {
+		return Config{}, fmt.Errorf("http.addr is required")
+	}
+	if cfg.HTTP.ReadTimeout <= 0 {
+		return Config{}, fmt.Errorf("http.read_timeout must be greater than zero")
+	}
+	if cfg.HTTP.WriteTimeout <= 0 {
+		return Config{}, fmt.Errorf("http.write_timeout must be greater than zero")
+	}
+	if cfg.HTTP.IdleTimeout <= 0 {
+		return Config{}, fmt.Errorf("http.idle_timeout must be greater than zero")
+	}
 	if cfg.Go2RTC.BaseURL == "" {
 		return Config{}, fmt.Errorf("go2rtc.base_url is required")
 	}
 	if cfg.Go2RTC.ConfigPath == "" {
 		return Config{}, fmt.Errorf("go2rtc.config_path is required")
 	}
-	if cfg.Schedule.Interval <= 0 {
-		return Config{}, fmt.Errorf("schedule.interval must be greater than zero")
+	if len(cfg.Schedule.Crons) == 0 {
+		return Config{}, fmt.Errorf("schedule.crons must contain at least one cron expression")
+	}
+	for i, spec := range cfg.Schedule.Crons {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
+			return Config{}, fmt.Errorf("schedule.crons[%d] is empty", i)
+		}
+		if _, err := cleanupCronParser.Parse(spec); err != nil {
+			return Config{}, fmt.Errorf("schedule.crons[%d] is invalid: %w", i, err)
+		}
+		cfg.Schedule.Crons[i] = spec
 	}
 	if cfg.Schedule.ConfirmationDelay <= 0 {
 		return Config{}, fmt.Errorf("schedule.confirmation_delay must be greater than zero")
 	}
-	if cfg.Redis.Addr != "" && cfg.Redis.RouterIP == "" {
-		return Config{}, fmt.Errorf("redis.router_ip is required when redis.addr is set")
+	if cfg.Snapshot.StorageDir == "" {
+		return Config{}, fmt.Errorf("snapshot.storage_dir is required")
+	}
+	if cfg.Redis.Addr != "" && cfg.Redis.PublishInterval <= 0 {
+		return Config{}, fmt.Errorf("redis.publish_interval must be greater than zero when redis.addr is set")
 	}
 
 	return cfg, nil
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("app.name", "go2rtc-stream-cleaner")
+	v.SetDefault("app.name", "go2rtc-manager")
 	v.SetDefault("app.env", "local")
+	v.SetDefault("app.box_ip", "")
 	v.SetDefault("log.level", "info")
+	v.SetDefault("http.addr", ":8080")
+	v.SetDefault("http.read_timeout", "5s")
+	v.SetDefault("http.write_timeout", "15s")
+	v.SetDefault("http.idle_timeout", "60s")
 	v.SetDefault("go2rtc.base_url", "http://127.0.0.1:1984")
 	v.SetDefault("go2rtc.username", "")
 	v.SetDefault("go2rtc.password", "")
@@ -101,11 +151,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("go2rtc.request_timeout", "10s")
 	v.SetDefault("go2rtc.backup_before_change", true)
 	v.SetDefault("schedule.run_on_start", true)
-	v.SetDefault("schedule.interval", "3h")
+	v.SetDefault("schedule.crons", []string{})
 	v.SetDefault("schedule.confirmation_delay", "3m")
 	v.SetDefault("action.dry_run", false)
+	v.SetDefault("snapshot.storage_dir", "storage")
 	v.SetDefault("redis.addr", "")
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.db", 0)
-	v.SetDefault("redis.router_ip", "")
+	v.SetDefault("redis.publish_interval", "0s")
 }

@@ -9,8 +9,8 @@ import (
 	protoactor "github.com/asynkron/protoactor-go/actor"
 	redis "github.com/redis/go-redis/v9"
 
-	"github.com/example/go2rtc-stream-cleaner/common"
-	"github.com/example/go2rtc-stream-cleaner/config"
+	"github.com/example/go2rtc-manager/common"
+	"github.com/example/go2rtc-manager/config"
 )
 
 type RedisActor struct {
@@ -37,7 +37,7 @@ func (a *RedisActor) Receive(ctx protoactor.Context) {
 			a.logger.Error("failed to initialize redis client", "error", err)
 			return
 		}
-		a.logger.Info("redis actor started", "addr", a.config.Redis.Addr, "key", a.streamCountKey())
+		a.logger.Info("redis actor started", "addr", a.config.Redis.Addr, "box_ip", a.config.App.BoxIP, "key", a.streamCountKey())
 	case *protoactor.Stopping:
 		if a.client != nil {
 			if err := a.client.Close(); err != nil {
@@ -97,7 +97,7 @@ func (a *RedisActor) getClient() (*redis.Client, error) {
 }
 
 func (a *RedisActor) streamCountKey() string {
-	return fmt.Sprintf("steam@count@%s", a.config.Redis.RouterIP)
+	return fmt.Sprintf("stream_count@%s", a.config.App.BoxIP)
 }
 
 func (a *RedisActor) setAliveStreamCount(aliveStreams int) error {

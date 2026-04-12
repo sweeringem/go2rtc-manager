@@ -13,13 +13,20 @@ type CleanupCycleStarted struct {
 	Reason      string
 }
 
+type CountAliveStreamsStarted struct {
+	TriggeredAt time.Time
+	Reason      string
+}
+
 type FetchStreamList struct {
 	TriggeredAt time.Time
+	RequestedBy string
 }
 
 type StreamListFetched struct {
 	TriggeredAt time.Time
 	Streams     []string
+	RequestedBy string
 	Error       string
 }
 
@@ -37,6 +44,7 @@ type StreamHealthChecked struct {
 	Attempt      int
 	HasProducer  bool
 	CheckedAt    time.Time
+	RequestedBy  string
 	ConfirmAfter time.Duration
 	Error        string
 }
@@ -71,8 +79,28 @@ type CleanupCycleFinished struct {
 	RemovedStreams int
 }
 
+type AliveStreamCountCalculated struct {
+	TriggeredAt  time.Time
+	Reason       string
+	AliveStreams int
+	Error        string
+}
+
 type UpdateStreamCount struct {
 	TriggeredAt  time.Time
 	Reason       string
 	AliveStreams int
+}
+
+type CaptureSnapshotRequest struct {
+	CamID       string
+	RequestedAt time.Time
+}
+
+type CaptureSnapshotResult struct {
+	CamID       string
+	RequestedAt time.Time
+	SavedPath   string
+	StatusCode  int
+	Error       string
 }
