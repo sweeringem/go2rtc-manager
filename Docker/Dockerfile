@@ -16,7 +16,10 @@ RUN addgroup -S app && adduser -S app -G app
 
 COPY --from=builder /out/go2rtc-manager /app/go2rtc-manager
 COPY config.yaml /app/config.yaml
-RUN mkdir -p /app/storage && chown -R app:app /app
+RUN mkdir -p /app/storage /config && chown -R app:app /app /config
+
+ENV GO2RTC_MANAGER_HTTP_ADDR=:7181
+EXPOSE 7181
 
 USER app
 

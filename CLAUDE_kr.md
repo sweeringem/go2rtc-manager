@@ -13,6 +13,8 @@
 
 이 저장소는 Go 1.24.x를 사용합니다. 기존 저장소 가이드에서는 로컬 개발 버전으로 Go 1.24.12를 기준으로 두고 있습니다.
 
+체크인된 `Docker/Dockerfile`은 컨테이너 실행 시 `GO2RTC_MANAGER_HTTP_ADDR=:7181`를 설정하고 `7181` 포트를 expose합니다. 저장소에는 `docker-compose.yml`도 포함되어 있으며, 로컬 컨테이너 실행 시 저장소 루트의 `config.yaml`, `storage`, `go2rtc.yaml`를 마운트하면서 `7181` 포트를 publish합니다.
+
 ## 런타임 및 설정 모델
 
 - `main.go`는 `config.yaml`을 로드하고, 공용 `slog` 로거를 생성한 뒤 Proto.Actor 시스템을 시작하고 `MasterActor`를 생성한 다음 HTTP 서버도 함께 시작합니다.

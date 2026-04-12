@@ -7,7 +7,7 @@ log:
   level: info
 
 http:
-  addr: ":8080"
+  addr: ":7181"
   read_timeout: 5s
   write_timeout: 15s
   idle_timeout: 60s

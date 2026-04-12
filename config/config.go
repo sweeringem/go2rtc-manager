@@ -140,7 +140,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.env", "local")
 	v.SetDefault("app.box_ip", "")
 	v.SetDefault("log.level", "info")
-	v.SetDefault("http.addr", ":8080")
+	v.SetDefault("http.addr", ":7181")
 	v.SetDefault("http.read_timeout", "5s")
 	v.SetDefault("http.write_timeout", "15s")
 	v.SetDefault("http.idle_timeout", "60s")

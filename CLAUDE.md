@@ -13,6 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Use Go 1.24.x in this repository. The existing repo guidance pins local development to Go 1.24.12.
 
+The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that publishes `7181` and mounts `config.yaml`, `storage`, and `go2rtc.yaml` from the repository root.
+
 ## Runtime and configuration model
 
 - `main.go` loads `config.yaml`, creates the shared `slog` logger, starts a Proto.Actor system, spawns `MasterActor`, and starts the HTTP server.

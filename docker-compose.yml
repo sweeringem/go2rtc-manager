@@ -1,0 +1,16 @@
+services:
+  go2rtc-manager:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile
+    image: go2rtc-manager:local
+    container_name: go2rtc-manager
+    restart: unless-stopped
+    ports:
+      - "7181:7181"
+    environment:
+      GO2RTC_MANAGER_HTTP_ADDR: ":7181"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./storage:/app/storage
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro

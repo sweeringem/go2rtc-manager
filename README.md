@@ -105,6 +105,24 @@ go build -o bin/go2rtc-manager .
 docker build -f Docker/Dockerfile -t go2rtc-manager .
 ```
 
+체크인된 Docker 이미지는 내부적으로 `GO2RTC_MANAGER_HTTP_ADDR=:7181`를 설정하고 `7181` 포트를 expose합니다.
+
+예시 실행:
+
+```bash
+docker run --rm -p 7181:7181 \
+  -v /path/to/go2rtc.yaml:/config/go2rtc.yaml:ro \
+  go2rtc-manager
+```
+
+`docker-compose.yml`도 함께 제공됩니다. 기본적으로 `7181` 포트를 publish하고, `./config.yaml`, `./storage`, `./go2rtc.yaml`를 컨테이너에 마운트합니다. `go2rtc.yaml` 파일은 저장소 루트에 준비되어 있어야 합니다.
+
+```bash
+docker compose up --build -d
+```
+
+`go2rtc.yaml`이 다른 경로에 있으면 `docker-compose.yml`의 bind mount 경로를 수정해서 사용하면 됩니다. `storage/` 디렉터리가 없으면 compose 실행 전에 생성해 두는 편이 안전합니다.
+
 ## 설정
 
 설정은 `config.yaml`에서 읽고, 환경 변수로 override할 수 있습니다.
@@ -125,7 +143,7 @@ app:
   box_ip: 192.168.0.10
 
 http:
-  addr: ":8080"
+  addr: ":7181"
   read_timeout: 5s
   write_timeout: 15s
   idle_timeout: 60s
@@ -247,7 +265,7 @@ Content-Type: application/json
 예시:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/snapshots \
+curl -X POST http://127.0.0.1:7181/snapshots \
   -H 'Content-Type: application/json' \
   -d '{"cam_id":"TEST_P1000HDKFH"}'
 ```

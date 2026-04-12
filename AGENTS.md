@@ -26,6 +26,8 @@ Use the standard Go toolchain from the repo root:
 
 Use Go 1.24.x for this repository. The pinned local version is Go 1.24.12.
 
+The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that publishes `7181` and mounts `config.yaml`, `storage`, and `go2rtc.yaml` from the repository root.
+
 ## Runtime & Configuration Notes
 Configuration is loaded through Viper. Environment overrides use the `GO2RTC_MANAGER_` prefix, with nested keys mapped using underscores. Example:
 
