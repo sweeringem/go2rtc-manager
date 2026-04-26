@@ -12,7 +12,7 @@ FROM alpine:3.21
 
 WORKDIR /app
 
-RUN addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
 
 COPY --from=builder /out/go2rtc-manager /app/go2rtc-manager
 COPY config.yaml /app/config.yaml

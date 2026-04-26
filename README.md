@@ -124,11 +124,13 @@ docker run --rm -p 7181:7181 \
   go2rtc-manager
 ```
 
-`docker-compose.yml`도 함께 제공됩니다. 기본적으로 `7181` 포트를 publish하고, `./config.yaml`, `./storage`, `./go2rtc.yaml`를 컨테이너에 마운트합니다. `go2rtc.yaml` 파일은 저장소 루트에 준비되어 있어야 합니다.
+`docker-compose.yml`도 함께 제공됩니다. 기본적으로 `go2rtc-manager`와 MinIO를 함께 실행하고, `7181`, `9000`, `9001` 포트를 publish하며, `./config.yaml`, `./storage`, `./go2rtc.yaml`를 컨테이너에 마운트합니다. MongoDB는 compose에 포함하지 않으므로 외부 MongoDB 주소를 `config.yaml`의 `mongodb.uri`에 설정해야 합니다. `go2rtc.yaml` 파일은 저장소 루트에 준비되어 있어야 합니다.
 
 ```bash
 docker compose up --build -d
 ```
+
+compose 기본 설정은 컨테이너에서 호스트의 go2rtc와 MongoDB에 접근할 수 있도록 `host.docker.internal`을 사용합니다. go2rtc나 MongoDB가 다른 서버에 있으면 `config.yaml`의 `go2rtc.base_url`, `mongodb.uri`를 실제 주소로 바꾸면 됩니다. MinIO API는 `localhost:9000`, 콘솔은 `http://localhost:9001`로 노출되며 기본 계정은 `minioadmin` / `minioadmin`입니다.
 
 `go2rtc.yaml`이 다른 경로에 있으면 `docker-compose.yml`의 bind mount 경로를 수정해서 사용하면 됩니다. `storage/` 디렉터리가 없으면 compose 실행 전에 생성해 두는 편이 안전합니다.
 
@@ -158,7 +160,7 @@ http:
   idle_timeout: 60s
 
 go2rtc:
-  base_url: http://127.0.0.1:1984
+  base_url: http://host.docker.internal:1984
   config_path: /config/go2rtc.yaml
   request_timeout: 10s
   backup_before_change: true
@@ -184,13 +186,13 @@ record:
     - 192.168.0.0/24
 
 minio:
-  endpoint: localhost:9000
+  endpoint: minio:9000
   access_key: minioadmin
   secret_key: minioadmin
   use_ssl: false
 
 mongodb:
-  uri: mongodb://localhost:27017
+  uri: mongodb://host.docker.internal:27017
   database: go2rtc_manager
   collection: BODYCAM_INFO
 

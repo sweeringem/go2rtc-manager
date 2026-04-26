@@ -10,7 +10,28 @@ services:
       - "7181:7181"
     environment:
       GO2RTC_MANAGER_HTTP_ADDR: ":7181"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./storage:/app/storage
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    depends_on:
+      - minio
+
+  minio:
+    image: minio/minio:latest
+    container_name: go2rtc-manager-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+
+volumes:
+  minio-data:
