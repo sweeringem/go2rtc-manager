@@ -19,7 +19,7 @@ The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exp
 
 - `main.go` loads `config.yaml`, creates the shared `slog` logger, starts a Proto.Actor system, spawns `MasterActor`, and starts the HTTP server.
 - Configuration is loaded by `config.Load` with Viper. File values can be overridden with environment variables prefixed by `GO2RTC_MANAGER_`, with nested keys mapped by underscores, e.g. `GO2RTC_MANAGER_GO2RTC_BASE_URL` and `GO2RTC_MANAGER_APP_BOX_IP`.
-- Validation in `config/config.go` is load-bearing: `app.box_ip`, `http.addr`, positive `http.read_timeout`, positive `http.write_timeout`, positive `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, one or more valid `schedule.crons` entries, positive `schedule.confirmation_delay`, `snapshot.storage_dir`, positive `record.max_duration`, positive `record.job_retention`, positive `record.max_concurrent_jobs`, required MinIO settings, required MongoDB settings, and positive `redis.publish_interval` whenever `redis.addr` is set.
+- Validation in `config/config.go` is load-bearing: `app.box_ip`, `http.addr`, positive `http.read_timeout`, positive `http.write_timeout`, positive `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, one or more valid `schedule.crons` entries, positive `schedule.confirmation_delay`, `snapshot.storage_dir`, positive `record.max_duration`, positive `record.job_retention`, positive `record.max_concurrent_jobs`, valid IP/CIDR entries in `record.allowed_ips`, required MinIO settings, required MongoDB settings, and positive `redis.publish_interval` whenever `redis.addr` is set.
 - Cleanup scheduling is driven by `schedule.crons` using standard 5-field cron strings. Cron expressions are interpreted in the server local timezone and can represent multiple runs per day.
 - `config.yaml` is the canonical example runtime config and can enable the cleanup scheduler, periodic Redis publishing, the snapshot HTTP API, and asynchronous MP4 recording to MinIO.
 
@@ -69,10 +69,11 @@ The service is organized around Proto.Actor actors with message contracts centra
 
 1. The HTTP server accepts `POST /record` with JSON fields `TYPE`, `mac`, `cam_id`, and `duration`.
 2. `TYPE` must be `UI` or `BODYCAM`; `duration` must parse as a positive Go duration and must not exceed `record.max_duration`.
-3. `httpserver` sends `StartRecordRequest` to `MasterActor`, which forwards it to `RecordActor`.
-4. `RecordActor` creates an in-memory job and returns `202 Accepted` with `job_id` and `accepted` status. If active `accepted`/`running` jobs have reached `record.max_concurrent_jobs`, it returns `429 Too Many Requests`.
-5. The background job looks up MongoDB `BODYCAM_INFO` by `mac`, normalizes `process` into the MinIO bucket name, records MP4 from go2rtc, creates the bucket if absent, and uploads the object.
-6. Callers use `GET /record/{job_id}` to poll `accepted`, `running`, `completed`, or `failed`; completed jobs include `bucket`, `object_key`, and `content_type`.
+3. `httpserver` allows `POST /record` and `GET /record/{job_id}` only when the direct client `RemoteAddr` matches `record.allowed_ips`; empty `allowed_ips` blocks all record API access with `403 Forbidden`.
+4. `httpserver` sends `StartRecordRequest` to `MasterActor`, which forwards it to `RecordActor`.
+5. `RecordActor` creates an in-memory job and returns `202 Accepted` with `job_id` and `accepted` status. If active `accepted`/`running` jobs have reached `record.max_concurrent_jobs`, it returns `429 Too Many Requests`.
+6. The background job looks up MongoDB `BODYCAM_INFO` by `mac`, normalizes `process` into the MinIO bucket name, records MP4 from go2rtc, creates the bucket if absent, and uploads the object.
+7. Callers use `GET /record/{job_id}` to poll `accepted`, `running`, `completed`, or `failed`; completed jobs include `bucket`, `object_key`, and `content_type`.
 
 ## Testing focus
 
@@ -95,7 +96,7 @@ When changing record behavior, keep `common/message.go`, `MasterActor`, `RecordA
 
 - The service expects the go2rtc config file path from `go2rtc.config_path`; by default it points to `/config/go2rtc.yaml`.
 - Snapshot files are stored under `snapshot.storage_dir`; the default is `storage`.
-- Record jobs are stored in memory and completed/failed jobs are pruned after `record.job_retention`; process restarts lose job state. `record.max_concurrent_jobs` defaults to `3` and limits only active `accepted`/`running` jobs.
+- Record jobs are stored in memory and completed/failed jobs are pruned after `record.job_retention`; process restarts lose job state. `record.max_concurrent_jobs` defaults to `3` and limits only active `accepted`/`running` jobs. Record API access uses direct `RemoteAddr` matching against `record.allowed_ips`; proxy headers are not used.
 - `app.box_ip` identifies the manager box and is used as the Redis key suffix.
 - `schedule.crons` configures cleanup run times with standard 5-field cron strings interpreted in the server local timezone.
 - `redis.publish_interval` controls how often the service recalculates and publishes the alive stream count when Redis is enabled.

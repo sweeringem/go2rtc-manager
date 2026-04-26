@@ -37,6 +37,8 @@ record:
   max_duration: 1h
   job_retention: 24h
   max_concurrent_jobs: 3
+  allowed_ips:
+    - 127.0.0.1
 
 minio:
   endpoint: localhost:9000

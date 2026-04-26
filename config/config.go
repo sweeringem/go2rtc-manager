@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -69,6 +70,7 @@ type RecordConfig struct {
 	MaxDuration       time.Duration `mapstructure:"max_duration"`
 	JobRetention      time.Duration `mapstructure:"job_retention"`
 	MaxConcurrentJobs int           `mapstructure:"max_concurrent_jobs"`
+	AllowedIPs        []string      `mapstructure:"allowed_ips"`
 }
 
 type MinIOConfig struct {
@@ -159,6 +161,18 @@ func Load(path string) (Config, error) {
 	if cfg.Record.MaxConcurrentJobs <= 0 {
 		return Config{}, fmt.Errorf("record.max_concurrent_jobs must be greater than zero")
 	}
+	for i, value := range cfg.Record.AllowedIPs {
+		allowedIP := strings.TrimSpace(value)
+		if allowedIP == "" {
+			return Config{}, fmt.Errorf("record.allowed_ips[%d] is empty", i)
+		}
+		if net.ParseIP(allowedIP) == nil {
+			if _, _, err := net.ParseCIDR(allowedIP); err != nil {
+				return Config{}, fmt.Errorf("record.allowed_ips[%d] must be a valid IP or CIDR", i)
+			}
+		}
+		cfg.Record.AllowedIPs[i] = allowedIP
+	}
 	if cfg.MinIO.Endpoint == "" {
 		return Config{}, fmt.Errorf("minio.endpoint is required")
 	}
@@ -207,6 +221,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("record.max_duration", "1h")
 	v.SetDefault("record.job_retention", "24h")
 	v.SetDefault("record.max_concurrent_jobs", 3)
+	v.SetDefault("record.allowed_ips", []string{})
 	v.SetDefault("minio.endpoint", "")
 	v.SetDefault("minio.access_key", "")
 	v.SetDefault("minio.secret_key", "")

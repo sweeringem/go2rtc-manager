@@ -178,6 +178,10 @@ record:
   max_duration: 1h
   job_retention: 24h
   max_concurrent_jobs: 3
+  allowed_ips:
+    - 127.0.0.1
+    - 10.0.0.20
+    - 192.168.0.0/24
 
 minio:
   endpoint: localhost:9000
@@ -207,6 +211,7 @@ redis:
 - `schedule.confirmation_delay`는 0보다 커야 함
 - `snapshot.storage_dir` 필수
 - `record.max_duration`, `record.job_retention`, `record.max_concurrent_jobs`는 0보다 커야 함
+- `record.allowed_ips` 항목은 유효한 IP 또는 CIDR이어야 함
 - `minio.endpoint`, `minio.access_key`, `minio.secret_key` 필수
 - `mongodb.uri`, `mongodb.database`, `mongodb.collection` 필수
 - `redis.addr`를 설정하면 `redis.publish_interval`도 0보다 커야 함
@@ -338,7 +343,7 @@ Content-Type: application/json
 }
 ```
 
-`TYPE`은 `UI` 또는 `BODYCAM`만 허용합니다. `duration`은 Go duration 문자열이며 `record.max_duration`을 초과할 수 없습니다. 동시에 실행 중인 `accepted`/`running` 녹화 job이 `record.max_concurrent_jobs`에 도달하면 `429 Too Many Requests`를 반환합니다.
+`TYPE`은 `UI` 또는 `BODYCAM`만 허용합니다. `duration`은 Go duration 문자열이며 `record.max_duration`을 초과할 수 없습니다. `POST /record`와 `GET /record/{job_id}`는 직접 연결한 클라이언트의 `RemoteAddr`가 `record.allowed_ips`의 IP 또는 CIDR에 매칭될 때만 허용합니다. 빈 `allowed_ips`는 record API 전체를 차단하며, 허용되지 않은 IP는 `403 Forbidden`을 반환합니다. 동시에 실행 중인 `accepted`/`running` 녹화 job이 `record.max_concurrent_jobs`에 도달하면 `429 Too Many Requests`를 반환합니다.
 
 성공하면 녹화 완료가 아니라 접수 결과를 반환합니다.
 

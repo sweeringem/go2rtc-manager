@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -21,6 +22,9 @@ type Server struct {
 	root       *protoactor.RootContext
 	masterPID  *protoactor.PID
 	httpServer *http.Server
+
+	recordAllowedIPs   []net.IP
+	recordAllowedCIDRs []*net.IPNet
 }
 
 type captureSnapshotHTTPPayload struct {
@@ -58,10 +62,12 @@ type recordHTTPResponse struct {
 func New(cfg config.Config, logger *slog.Logger, root *protoactor.RootContext, masterPID *protoactor.PID) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
-		cfg:       cfg,
-		logger:    logger.With("component", "httpserver"),
-		root:      root,
-		masterPID: masterPID,
+		cfg:                cfg,
+		logger:             logger.With("component", "httpserver"),
+		root:               root,
+		masterPID:          masterPID,
+		recordAllowedIPs:   parseAllowedRecordIPs(cfg.Record.AllowedIPs),
+		recordAllowedCIDRs: parseAllowedRecordCIDRs(cfg.Record.AllowedIPs),
 	}
 	mux.HandleFunc("/snapshots", server.handleCaptureSnapshot)
 	mux.HandleFunc("/record", server.handleStartRecord)
@@ -138,6 +144,11 @@ func (s *Server) handleCaptureSnapshot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStartRecord(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, recordHTTPResponse{Error: "method not allowed"})
+		return
+	}
+	if !s.recordAccessAllowed(r) {
+		s.logger.Warn("record access forbidden", "remote_addr", r.RemoteAddr, "method", r.Method, "path", r.URL.Path)
+		writeJSON(w, http.StatusForbidden, recordHTTPResponse{Error: "record access forbidden"})
 		return
 	}
 
@@ -228,6 +239,11 @@ func (s *Server) handleGetRecordJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, recordHTTPResponse{Error: "method not allowed"})
 		return
 	}
+	if !s.recordAccessAllowed(r) {
+		s.logger.Warn("record access forbidden", "remote_addr", r.RemoteAddr, "method", r.Method, "path", r.URL.Path)
+		writeJSON(w, http.StatusForbidden, recordHTTPResponse{Error: "record access forbidden"})
+		return
+	}
 
 	jobID := strings.TrimPrefix(r.URL.Path, "/record/")
 	if jobID == "" || strings.Contains(jobID, "/") {
@@ -276,6 +292,60 @@ func recordStatusHTTPResponse(result *common.RecordJobStatusResult) recordHTTPRe
 		response.CompletedAt = result.CompletedAt.UTC().Format(time.RFC3339)
 	}
 	return response
+}
+
+func (s *Server) recordAccessAllowed(r *http.Request) bool {
+	remoteIP := remoteAddrIP(r.RemoteAddr)
+	if remoteIP == nil {
+		return false
+	}
+	for _, allowedIP := range s.recordAllowedIPs {
+		if allowedIP.Equal(remoteIP) {
+			return true
+		}
+	}
+	for _, allowedCIDR := range s.recordAllowedCIDRs {
+		if allowedCIDR.Contains(remoteIP) {
+			return true
+		}
+	}
+	return false
+}
+
+func remoteAddrIP(remoteAddr string) net.IP {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	return net.ParseIP(strings.TrimSpace(host))
+}
+
+func parseAllowedRecordIPs(values []string) []net.IP {
+	ips := make([]net.IP, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if strings.Contains(value, "/") {
+			continue
+		}
+		if ip := net.ParseIP(value); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
+func parseAllowedRecordCIDRs(values []string) []*net.IPNet {
+	cidrs := make([]*net.IPNet, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !strings.Contains(value, "/") {
+			continue
+		}
+		if _, ipNet, err := net.ParseCIDR(value); err == nil {
+			cidrs = append(cidrs, ipNet)
+		}
+	}
+	return cidrs
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {

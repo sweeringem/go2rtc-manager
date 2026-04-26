@@ -142,6 +142,7 @@ func TestHandleStartRecord(t *testing.T) {
 		},
 		Record: config.RecordConfig{
 			MaxDuration: time.Hour,
+			AllowedIPs:  []string{"192.0.2.10"},
 		},
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
 
@@ -156,6 +157,7 @@ func TestHandleStartRecord(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader(body))
+	req.RemoteAddr = "192.0.2.10:12345"
 	w := httptest.NewRecorder()
 
 	server.handleStartRecord(w, req)
@@ -193,10 +195,12 @@ func TestHandleStartRecordBadRequest(t *testing.T) {
 		},
 		Record: config.RecordConfig{
 			MaxDuration: time.Hour,
+			AllowedIPs:  []string{"192.0.2.10"},
 		},
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"INVALID","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
+	req.RemoteAddr = "192.0.2.10:12345"
 	w := httptest.NewRecorder()
 
 	server.handleStartRecord(w, req)
@@ -221,9 +225,13 @@ func TestHandleGetRecordJob(t *testing.T) {
 			WriteTimeout: 5 * time.Second,
 			IdleTimeout:  30 * time.Second,
 		},
+		Record: config.RecordConfig{
+			AllowedIPs: []string{"192.0.2.10"},
+		},
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodGet, "/record/record_20260426T063000Z_a1b2c3d4", nil)
+	req.RemoteAddr = "192.0.2.10:12345"
 	w := httptest.NewRecorder()
 
 	server.handleGetRecordJob(w, req)
@@ -241,5 +249,131 @@ func TestHandleGetRecordJob(t *testing.T) {
 	}
 	if response.StartedAt != "2026-04-26T06:30:00Z" {
 		t.Fatalf("unexpected started_at: got %s", response.StartedAt)
+	}
+}
+
+func TestHandleStartRecordForbiddenByRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	system := protoactor.NewActorSystem()
+	masterPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
+		return &snapshotResponderActor{}
+	}))
+
+	server := New(config.Config{
+		HTTP: config.HTTPConfig{
+			Addr:         ":7181",
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		},
+		Record: config.RecordConfig{
+			MaxDuration: time.Hour,
+			AllowedIPs:  []string{"192.0.2.10"},
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+
+	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
+	req.RemoteAddr = "192.0.2.11:12345"
+	w := httptest.NewRecorder()
+
+	server.handleStartRecord(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status code: got %d want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestHandleGetRecordJobForbiddenByRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	system := protoactor.NewActorSystem()
+	masterPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
+		return &snapshotResponderActor{}
+	}))
+
+	server := New(config.Config{
+		HTTP: config.HTTPConfig{
+			Addr:         ":7181",
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		},
+		Record: config.RecordConfig{
+			AllowedIPs: []string{"192.0.2.10"},
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+
+	req := httptest.NewRequest(http.MethodGet, "/record/record_20260426T063000Z_a1b2c3d4", nil)
+	req.RemoteAddr = "192.0.2.11:12345"
+	w := httptest.NewRecorder()
+
+	server.handleGetRecordJob(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status code: got %d want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestHandleStartRecordAllowsCIDR(t *testing.T) {
+	t.Parallel()
+
+	system := protoactor.NewActorSystem()
+	masterPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
+		return &snapshotResponderActor{}
+	}))
+
+	server := New(config.Config{
+		HTTP: config.HTTPConfig{
+			Addr:         ":7181",
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		},
+		Record: config.RecordConfig{
+			MaxDuration: time.Hour,
+			AllowedIPs:  []string{"192.0.2.0/24"},
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+
+	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
+	req.RemoteAddr = "192.0.2.10:12345"
+	w := httptest.NewRecorder()
+
+	server.handleStartRecord(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("unexpected status code: got %d want %d", w.Code, http.StatusAccepted)
+	}
+}
+
+func TestHandleStartRecordForbiddenWhenAllowedIPsEmpty(t *testing.T) {
+	t.Parallel()
+
+	system := protoactor.NewActorSystem()
+	masterPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
+		return &snapshotResponderActor{}
+	}))
+
+	server := New(config.Config{
+		HTTP: config.HTTPConfig{
+			Addr:         ":7181",
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		},
+		Record: config.RecordConfig{
+			MaxDuration: time.Hour,
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+
+	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
+	req.RemoteAddr = "192.0.2.10:12345"
+	w := httptest.NewRecorder()
+
+	server.handleStartRecord(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status code: got %d want %d", w.Code, http.StatusForbidden)
 	}
 }

@@ -97,12 +97,13 @@ Validation in `config/config.go` is load-bearing. Keep these constraints aligned
 - `schedule.confirmation_delay` must be positive
 - `snapshot.storage_dir` is required
 - `record.max_duration`, `record.job_retention`, and `record.max_concurrent_jobs` must be positive
+- `record.allowed_ips` entries must be valid IPs or CIDRs
 - `minio.endpoint`, `minio.access_key`, and `minio.secret_key` are required
 - `mongodb.uri`, `mongodb.database`, and `mongodb.collection` are required
 - `redis.publish_interval` must be positive whenever `redis.addr` is set
 
 Cleanup scheduling is cron-based, not interval-based. `schedule.crons` can contain multiple daily run times, and each cron is interpreted in the server local timezone.
-Recording uses go2rtc `GET /api/stream.mp4?src=<cam_id>&duration=<seconds>&filename=<filename>` and stores MP4 objects in MinIO. `record.max_duration` defaults to `1h`, `record.max_concurrent_jobs` defaults to `3`, and completed/failed in-memory jobs are pruned after `record.job_retention`.
+Recording uses go2rtc `GET /api/stream.mp4?src=<cam_id>&duration=<seconds>&filename=<filename>` and stores MP4 objects in MinIO. `record.max_duration` defaults to `1h`, `record.max_concurrent_jobs` defaults to `3`, and completed/failed in-memory jobs are pruned after `record.job_retention`. `POST /record` and `GET /record/{job_id}` are allowed only when the direct client `RemoteAddr` matches `record.allowed_ips`; empty `allowed_ips` blocks all record API access.
 
 ## Actor Responsibilities
 Keep actor responsibilities narrow and consistent with the current message flow:
@@ -133,7 +134,7 @@ The service exposes `POST /snapshots`, `POST /record`, and `GET /record/{job_id}
 
 Preserve the current request/response shape unless the user explicitly asks for an API change.
 
-Record request body: JSON with `TYPE`, `mac`, `cam_id`, and `duration`. `TYPE` must be `UI` or `BODYCAM`. `POST /record` returns `202 Accepted` with `job_id` and `accepted` status; callers poll `GET /record/{job_id}` for `running`, `completed`, or `failed`. Completed record jobs return `bucket`, `object_key`, and `content_type`. If active `accepted`/`running` jobs reach `record.max_concurrent_jobs`, `POST /record` returns `429 Too Many Requests`.
+Record request body: JSON with `TYPE`, `mac`, `cam_id`, and `duration`. `TYPE` must be `UI` or `BODYCAM`. `POST /record` returns `202 Accepted` with `job_id` and `accepted` status; callers poll `GET /record/{job_id}` for `running`, `completed`, or `failed`. Completed record jobs return `bucket`, `object_key`, and `content_type`. If `RemoteAddr` is not allowed, record APIs return `403 Forbidden`. If active `accepted`/`running` jobs reach `record.max_concurrent_jobs`, `POST /record` returns `429 Too Many Requests`.
 
 ## Coding Style & Naming Conventions
 Follow idiomatic Go:
