@@ -1,3 +1,3 @@
 *:Zone.Identifier
 storage/
-*_test.go
+.codex

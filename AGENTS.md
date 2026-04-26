@@ -1,3 +1,53 @@
+basic rule for project
+1. Think Before Coding
+Don't assume. Don't hide confusion. Surface tradeoffs.
+
+Before implementing:
+
+State your assumptions explicitly. If uncertain, ask.
+If multiple interpretations exist, present them - don't pick silently.
+If a simpler approach exists, say so. Push back when warranted.
+If something is unclear, stop. Name what's confusing. Ask.
+2. Simplicity First
+Minimum code that solves the problem. Nothing speculative.
+
+No features beyond what was asked.
+No abstractions for single-use code.
+No "flexibility" or "configurability" that wasn't requested.
+No error handling for impossible scenarios.
+If you write 200 lines and it could be 50, rewrite it.
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+3. Surgical Changes
+Touch only what you must. Clean up only your own mess.
+
+When editing existing code:
+
+Don't "improve" adjacent code, comments, or formatting.
+Don't refactor things that aren't broken.
+Match existing style, even if you'd do it differently.
+If you notice unrelated dead code, mention it - don't delete it.
+When your changes create orphans:
+
+Remove imports/variables/functions that YOUR changes made unused.
+Don't remove pre-existing dead code unless asked.
+The test: Every changed line should trace directly to the user's request.
+
+4. Goal-Driven Execution
+Define success criteria. Loop until verified.
+
+Transform tasks into verifiable goals:
+
+"Add validation" → "Write tests for invalid inputs, then make them pass"
+"Fix the bug" → "Write a test that reproduces it, then make it pass"
+"Refactor X" → "Ensure tests pass before and after"
+For multi-step tasks, state a brief plan:
+
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
 # Repository Guidelines
 
 ## Project Structure & Module Organization
@@ -5,10 +55,10 @@
 
 Project layout:
 
-- `actor/` — actor implementations for orchestration and I/O boundaries (`MasterActor`, `StreamCleanerActor`, `StreamCountActor`, `Go2RTCActor`, `SnapshotActor`, `RedisActor`, `ActionActor`)
+- `actor/` — actor implementations for orchestration and I/O boundaries (`MasterActor`, `StreamCleanerActor`, `StreamCountActor`, `Go2RTCActor`, `SnapshotActor`, `RecordActor`, `RedisActor`, `ActionActor`)
 - `common/` — actor message contracts in `common/message.go`
 - `config/` — Viper-based config loading, defaults, validation, and config tests
-- `httpserver/` — HTTP handlers and server wiring for `POST /snapshots`
+- `httpserver/` — HTTP handlers and server wiring for `POST /snapshots`, `POST /record`, and `GET /record/{job_id}`
 - `logging/` — shared logger construction
 - `Docker/` — container build assets
 
@@ -33,6 +83,8 @@ Configuration is loaded through Viper. Environment overrides use the `GO2RTC_MAN
 
 - `GO2RTC_MANAGER_APP_BOX_IP=192.168.0.10`
 - `GO2RTC_MANAGER_GO2RTC_BASE_URL=http://127.0.0.1:1984`
+- `GO2RTC_MANAGER_MINIO_ENDPOINT=localhost:9000`
+- `GO2RTC_MANAGER_MONGODB_URI=mongodb://localhost:27017`
 - `GO2RTC_MANAGER_REDIS_PUBLISH_INTERVAL=5m`
 
 Validation in `config/config.go` is load-bearing. Keep these constraints aligned with the implementation:
@@ -44,9 +96,13 @@ Validation in `config/config.go` is load-bearing. Keep these constraints aligned
 - `schedule.crons` must contain one or more valid 5-field cron expressions
 - `schedule.confirmation_delay` must be positive
 - `snapshot.storage_dir` is required
+- `record.max_duration`, `record.job_retention`, and `record.max_concurrent_jobs` must be positive
+- `minio.endpoint`, `minio.access_key`, and `minio.secret_key` are required
+- `mongodb.uri`, `mongodb.database`, and `mongodb.collection` are required
 - `redis.publish_interval` must be positive whenever `redis.addr` is set
 
 Cleanup scheduling is cron-based, not interval-based. `schedule.crons` can contain multiple daily run times, and each cron is interpreted in the server local timezone.
+Recording uses go2rtc `GET /api/stream.mp4?src=<cam_id>&duration=<seconds>&filename=<filename>` and stores MP4 objects in MinIO. `record.max_duration` defaults to `1h`, `record.max_concurrent_jobs` defaults to `3`, and completed/failed in-memory jobs are pruned after `record.job_retention`.
 
 ## Actor Responsibilities
 Keep actor responsibilities narrow and consistent with the current message flow:
@@ -56,15 +112,17 @@ Keep actor responsibilities narrow and consistent with the current message flow:
 - `StreamCountActor` owns count-only alive stream calculations for periodic Redis publishing and must never delete streams.
 - `Go2RTCActor` reads stream names from the go2rtc YAML config, checks producer state through `GET /api/streams?src=<name>`, optionally creates backups, and removes streams through `DELETE /api/streams?src=<name>`.
 - `SnapshotActor` captures images through `GET /api/frame.jpeg?src=<cam_id>` and writes JPEGs under `snapshot.storage_dir`.
+- `RecordActor` owns asynchronous record jobs, looks up `process`, `site`, and `group` from MongoDB by `mac`, records MP4 through go2rtc, creates a MinIO bucket from normalized `process` when absent, and uploads to `<site>/<group>/<cam_id>_<TYPE>_<timestamp>.mp4`.
 - `RedisActor` publishes alive-stream counts to `stream_count@<app.box_ip>` using Redis `SET`, and supports both delete-triggered and periodic writes.
 - `ActionActor` is the post-removal hook point and currently logs follow-up actions only.
 
 When changing cleanup behavior, keep `common/message.go`, `MasterActor`, `StreamCleanerActor`, and `Go2RTCActor` aligned.
 When changing periodic Redis counting, keep `common/message.go`, `MasterActor`, `StreamCountActor`, `Go2RTCActor`, and `RedisActor` aligned.
 When changing snapshot behavior, keep `common/message.go`, `MasterActor`, `SnapshotActor`, and `httpserver/server.go` aligned.
+When changing record behavior, keep `common/message.go`, `MasterActor`, `RecordActor`, and `httpserver/server.go` aligned.
 
 ## HTTP API Expectations
-The service exposes `POST /snapshots`.
+The service exposes `POST /snapshots`, `POST /record`, and `GET /record/{job_id}`.
 
 - Request body: JSON with `cam_id`
 - Success response: `201 Created` with `cam_id` and `saved_path`
@@ -74,6 +132,8 @@ The service exposes `POST /snapshots`.
 - Future timeout or actor response failure: `504 Gateway Timeout`
 
 Preserve the current request/response shape unless the user explicitly asks for an API change.
+
+Record request body: JSON with `TYPE`, `mac`, `cam_id`, and `duration`. `TYPE` must be `UI` or `BODYCAM`. `POST /record` returns `202 Accepted` with `job_id` and `accepted` status; callers poll `GET /record/{job_id}` for `running`, `completed`, or `failed`. Completed record jobs return `bucket`, `object_key`, and `content_type`. If active `accepted`/`running` jobs reach `record.max_concurrent_jobs`, `POST /record` returns `429 Too Many Requests`.
 
 ## Coding Style & Naming Conventions
 Follow idiomatic Go:
@@ -90,6 +150,7 @@ Tests already exist and should be extended when behavior changes:
 
 - `actor/Go2RTCActor_test.go`
 - `actor/RedisActor_test.go`
+- `actor/RecordActor_test.go`
 - `actor/SnapshotActor_test.go`
 - `actor/StreamCountActor_test.go`
 - `config/config_test.go`

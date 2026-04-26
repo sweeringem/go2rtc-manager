@@ -104,3 +104,42 @@ type CaptureSnapshotResult struct {
 	StatusCode  int
 	Error       string
 }
+
+type StartRecordRequest struct {
+	Type        string
+	Mac         string
+	CamID       string
+	Duration    time.Duration
+	RequestedAt time.Time
+}
+
+type StartRecordResult struct {
+	JobID      string
+	Status     string
+	Type       string
+	Mac        string
+	CamID      string
+	Duration   time.Duration
+	StatusCode int
+	Error      string
+}
+
+type GetRecordJobRequest struct {
+	JobID string
+}
+
+type RecordJobStatusResult struct {
+	JobID       string
+	Status      string
+	Type        string
+	Mac         string
+	CamID       string
+	Duration    time.Duration
+	Bucket      string
+	ObjectKey   string
+	ContentType string
+	StartedAt   time.Time
+	CompletedAt time.Time
+	Error       string
+	StatusCode  int
+}

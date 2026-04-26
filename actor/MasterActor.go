@@ -20,6 +20,7 @@ type MasterActor struct {
 	streamCountPID   *protoactor.PID
 	go2rtcPID        *protoactor.PID
 	snapshotPID      *protoactor.PID
+	recordPID        *protoactor.PID
 	actionPID        *protoactor.PID
 	redisPID         *protoactor.PID
 
@@ -104,6 +105,10 @@ func (a *MasterActor) Receive(ctx protoactor.Context) {
 		ctx.Send(a.actionPID, msg)
 	case *common.CaptureSnapshotRequest:
 		ctx.Forward(a.snapshotPID)
+	case *common.StartRecordRequest:
+		ctx.Forward(a.recordPID)
+	case *common.GetRecordJobRequest:
+		ctx.Forward(a.recordPID)
 	default:
 	}
 }
@@ -117,6 +122,9 @@ func (a *MasterActor) spawnChildren(ctx protoactor.Context) {
 	}))
 	a.snapshotPID = ctx.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
 		return NewSnapshotActor(a.config, a.logger)
+	}))
+	a.recordPID = ctx.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
+		return NewRecordActor(a.config, a.logger, a.rootContext)
 	}))
 	a.redisPID = ctx.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
 		return NewRedisActor(a.config, a.logger)
@@ -133,6 +141,7 @@ func (a *MasterActor) spawnChildren(ctx protoactor.Context) {
 		"streamCountPID", a.streamCountPID.String(),
 		"go2rtcPID", a.go2rtcPID.String(),
 		"snapshotPID", a.snapshotPID.String(),
+		"recordPID", a.recordPID.String(),
 		"actionPID", a.actionPID.String(),
 		"redisPID", a.redisPID.String(),
 	)

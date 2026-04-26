@@ -33,6 +33,22 @@ action:
 snapshot:
   storage_dir: storage
 
+record:
+  max_duration: 1h
+  job_retention: 24h
+  max_concurrent_jobs: 3
+
+minio:
+  endpoint: localhost:9000
+  access_key: minioadmin
+  secret_key: minioadmin
+  use_ssl: false
+
+mongodb:
+  uri: mongodb://localhost:27017
+  database: go2rtc_manager
+  collection: BODYCAM_INFO
+
 redis:
   addr: ""
   password: ""

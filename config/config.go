@@ -19,6 +19,9 @@ type Config struct {
 	Schedule ScheduleConfig `mapstructure:"schedule"`
 	Action   ActionConfig   `mapstructure:"action"`
 	Snapshot SnapshotConfig `mapstructure:"snapshot"`
+	Record   RecordConfig   `mapstructure:"record"`
+	MinIO    MinIOConfig    `mapstructure:"minio"`
+	MongoDB  MongoDBConfig  `mapstructure:"mongodb"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 }
 
@@ -60,6 +63,25 @@ type ActionConfig struct {
 
 type SnapshotConfig struct {
 	StorageDir string `mapstructure:"storage_dir"`
+}
+
+type RecordConfig struct {
+	MaxDuration       time.Duration `mapstructure:"max_duration"`
+	JobRetention      time.Duration `mapstructure:"job_retention"`
+	MaxConcurrentJobs int           `mapstructure:"max_concurrent_jobs"`
+}
+
+type MinIOConfig struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+}
+
+type MongoDBConfig struct {
+	URI        string `mapstructure:"uri"`
+	Database   string `mapstructure:"database"`
+	Collection string `mapstructure:"collection"`
 }
 
 type RedisConfig struct {
@@ -128,6 +150,33 @@ func Load(path string) (Config, error) {
 	if cfg.Snapshot.StorageDir == "" {
 		return Config{}, fmt.Errorf("snapshot.storage_dir is required")
 	}
+	if cfg.Record.MaxDuration <= 0 {
+		return Config{}, fmt.Errorf("record.max_duration must be greater than zero")
+	}
+	if cfg.Record.JobRetention <= 0 {
+		return Config{}, fmt.Errorf("record.job_retention must be greater than zero")
+	}
+	if cfg.Record.MaxConcurrentJobs <= 0 {
+		return Config{}, fmt.Errorf("record.max_concurrent_jobs must be greater than zero")
+	}
+	if cfg.MinIO.Endpoint == "" {
+		return Config{}, fmt.Errorf("minio.endpoint is required")
+	}
+	if cfg.MinIO.AccessKey == "" {
+		return Config{}, fmt.Errorf("minio.access_key is required")
+	}
+	if cfg.MinIO.SecretKey == "" {
+		return Config{}, fmt.Errorf("minio.secret_key is required")
+	}
+	if cfg.MongoDB.URI == "" {
+		return Config{}, fmt.Errorf("mongodb.uri is required")
+	}
+	if cfg.MongoDB.Database == "" {
+		return Config{}, fmt.Errorf("mongodb.database is required")
+	}
+	if cfg.MongoDB.Collection == "" {
+		return Config{}, fmt.Errorf("mongodb.collection is required")
+	}
 	if cfg.Redis.Addr != "" && cfg.Redis.PublishInterval <= 0 {
 		return Config{}, fmt.Errorf("redis.publish_interval must be greater than zero when redis.addr is set")
 	}
@@ -155,6 +204,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("schedule.confirmation_delay", "3m")
 	v.SetDefault("action.dry_run", false)
 	v.SetDefault("snapshot.storage_dir", "storage")
+	v.SetDefault("record.max_duration", "1h")
+	v.SetDefault("record.job_retention", "24h")
+	v.SetDefault("record.max_concurrent_jobs", 3)
+	v.SetDefault("minio.endpoint", "")
+	v.SetDefault("minio.access_key", "")
+	v.SetDefault("minio.secret_key", "")
+	v.SetDefault("minio.use_ssl", false)
+	v.SetDefault("mongodb.uri", "")
+	v.SetDefault("mongodb.database", "")
+	v.SetDefault("mongodb.collection", "BODYCAM_INFO")
 	v.SetDefault("redis.addr", "")
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.db", 0)
