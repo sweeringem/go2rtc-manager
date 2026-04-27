@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -56,7 +56,7 @@ type objectStore interface {
 
 type RecordActor struct {
 	config      config.Config
-	logger      *slog.Logger
+	logger      *zap.Logger
 	rootContext *protoactor.RootContext
 	httpClient  *http.Client
 	lookup      bodycamLookup
@@ -99,10 +99,10 @@ type recordJobFailed struct {
 	CompletedAt time.Time
 }
 
-func NewRecordActor(cfg config.Config, logger *slog.Logger, root *protoactor.RootContext) *RecordActor {
+func NewRecordActor(cfg config.Config, logger *zap.Logger, root *protoactor.RootContext) *RecordActor {
 	actor := &RecordActor{
 		config:      cfg,
-		logger:      logger.With("actor", "RecordActor"),
+		logger:      logger.With(zap.String("actor", "RecordActor")),
 		rootContext: root,
 		httpClient: &http.Client{
 			Timeout: cfg.Record.MaxDuration + cfg.Go2RTC.RequestTimeout,
@@ -130,11 +130,14 @@ func NewRecordActor(cfg config.Config, logger *slog.Logger, root *protoactor.Roo
 func (a *RecordActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *protoactor.Started:
-		a.logger.Info("record actor started", "max_duration", a.config.Record.MaxDuration, "job_retention", a.config.Record.JobRetention)
+		a.logger.Info("record actor started",
+			zap.Duration("max_duration", a.config.Record.MaxDuration),
+			zap.Duration("job_retention", a.config.Record.JobRetention),
+		)
 	case *protoactor.Stopping:
 		if a.lookup != nil {
 			if err := a.lookup.Close(context.Background()); err != nil {
-				a.logger.Error("failed to close mongodb client", "error", err)
+				a.logger.Error("failed to close mongodb client", zap.Error(err))
 			}
 		}
 	case *common.StartRecordRequest:
@@ -304,7 +307,7 @@ func (a *RecordActor) executeRecord(self *protoactor.PID, job recordJob) {
 }
 
 func (a *RecordActor) failRecordJob(self *protoactor.PID, jobID string, err error) {
-	a.logger.Error("record job failed", "job_id", jobID, "error", err)
+	a.logger.Error("record job failed", zap.String("job_id", jobID), zap.Error(err))
 	a.rootContext.Send(self, &recordJobFailed{
 		JobID:       jobID,
 		Error:       err.Error(),

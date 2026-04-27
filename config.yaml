@@ -5,6 +5,12 @@ app:
 
 log:
   level: info
+  format: json
+  file_path: logs/go2rtc-manager.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 30
+  compress: true
 
 http:
   addr: ":7181"

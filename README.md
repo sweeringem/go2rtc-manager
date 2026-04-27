@@ -30,7 +30,7 @@
 서비스 시작 시 `main.go`가 다음을 수행합니다.
 
 1. `config.yaml` 로드
-2. `slog` 기반 로거 생성
+2. zap 기반 로거 생성
 3. Proto.Actor 시스템 시작
 4. `MasterActor` 생성
 5. HTTP 서버 시작
@@ -124,7 +124,7 @@ docker run --rm -p 7181:7181 \
   go2rtc-manager
 ```
 
-`docker-compose.yml`도 함께 제공됩니다. 기본적으로 `go2rtc-manager`와 MinIO를 함께 실행하고, `7181`, `9000`, `9001` 포트를 publish하며, `./config.yaml`, `./storage`, `./go2rtc.yaml`를 컨테이너에 마운트합니다. MongoDB는 compose에 포함하지 않으므로 외부 MongoDB 주소를 `config.yaml`의 `mongodb.uri`에 설정해야 합니다. `go2rtc.yaml` 파일은 저장소 루트에 준비되어 있어야 합니다.
+`docker-compose.yml`도 함께 제공됩니다. 기본적으로 `go2rtc-manager`와 MinIO를 함께 실행하고, `7181`, `9000`, `9001` 포트를 publish하며, `./config.yaml`, `./storage`, `./logs`, `./go2rtc.yaml`를 컨테이너에 마운트합니다. MongoDB는 compose에 포함하지 않으므로 외부 MongoDB 주소를 `config.yaml`의 `mongodb.uri`에 설정해야 합니다. `go2rtc.yaml` 파일은 저장소 루트에 준비되어 있어야 합니다.
 
 ```bash
 docker compose up --build -d
@@ -132,7 +132,9 @@ docker compose up --build -d
 
 compose 기본 설정은 컨테이너에서 호스트의 go2rtc와 MongoDB에 접근할 수 있도록 `host.docker.internal`을 사용합니다. go2rtc나 MongoDB가 다른 서버에 있으면 `config.yaml`의 `go2rtc.base_url`, `mongodb.uri`를 실제 주소로 바꾸면 됩니다. MinIO API는 `localhost:9000`, 콘솔은 `http://localhost:9001`로 노출되며 기본 계정은 `minioadmin` / `minioadmin`입니다.
 
-`go2rtc.yaml`이 다른 경로에 있으면 `docker-compose.yml`의 bind mount 경로를 수정해서 사용하면 됩니다. `storage/` 디렉터리가 없으면 compose 실행 전에 생성해 두는 편이 안전합니다.
+로그는 stdout과 `./logs/go2rtc-manager.log`에 함께 기록되며, 파일 로그는 크기/개수/기간 기준으로 rotation됩니다.
+
+`go2rtc.yaml`이 다른 경로에 있으면 `docker-compose.yml`의 bind mount 경로를 수정해서 사용하면 됩니다. `storage/`, `logs/` 디렉터리가 없으면 compose 실행 전에 생성해 두는 편이 안전합니다.
 
 ## 설정
 
@@ -152,6 +154,15 @@ app:
   name: go2rtc-manager
   env: production
   box_ip: 192.168.0.10
+
+log:
+  level: info
+  format: json
+  file_path: logs/go2rtc-manager.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 30
+  compress: true
 
 http:
   addr: ":7181"
@@ -206,6 +217,8 @@ redis:
 중요 검증 규칙:
 
 - `app.box_ip` 필수
+- `log.format`은 `text` 또는 `json`이어야 함
+- `log.file_path`를 설정하면 `log.max_size_mb`, `log.max_backups`, `log.max_age_days`는 0보다 커야 함
 - `http.addr` 필수
 - `http.read_timeout`, `http.write_timeout`, `http.idle_timeout`은 0보다 커야 함
 - `go2rtc.base_url`, `go2rtc.config_path` 필수

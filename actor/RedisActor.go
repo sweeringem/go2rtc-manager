@@ -3,11 +3,11 @@ package actor
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
 	redis "github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -15,14 +15,14 @@ import (
 
 type RedisActor struct {
 	config config.Config
-	logger *slog.Logger
+	logger *zap.Logger
 	client *redis.Client
 }
 
-func NewRedisActor(cfg config.Config, logger *slog.Logger) *RedisActor {
+func NewRedisActor(cfg config.Config, logger *zap.Logger) *RedisActor {
 	return &RedisActor{
 		config: cfg,
-		logger: logger.With("actor", "RedisActor"),
+		logger: logger.With(zap.String("actor", "RedisActor")),
 	}
 }
 
@@ -30,18 +30,22 @@ func (a *RedisActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *protoactor.Started:
 		if !a.isEnabled() {
-			a.logger.Info("redis actor disabled", "reason", "redis.addr not configured")
+			a.logger.Info("redis actor disabled", zap.String("reason", "redis.addr not configured"))
 			return
 		}
 		if _, err := a.getClient(); err != nil {
-			a.logger.Error("failed to initialize redis client", "error", err)
+			a.logger.Error("failed to initialize redis client", zap.Error(err))
 			return
 		}
-		a.logger.Info("redis actor started", "addr", a.config.Redis.Addr, "box_ip", a.config.App.BoxIP, "key", a.streamCountKey())
+		a.logger.Info("redis actor started",
+			zap.String("addr", a.config.Redis.Addr),
+			zap.String("box_ip", a.config.App.BoxIP),
+			zap.String("key", a.streamCountKey()),
+		)
 	case *protoactor.Stopping:
 		if a.client != nil {
 			if err := a.client.Close(); err != nil {
-				a.logger.Error("failed to close redis client", "error", err)
+				a.logger.Error("failed to close redis client", zap.Error(err))
 			}
 		}
 	case *common.UpdateStreamCount:
@@ -50,19 +54,19 @@ func (a *RedisActor) Receive(ctx protoactor.Context) {
 		}
 		if err := a.setAliveStreamCount(msg.AliveStreams); err != nil {
 			a.logger.Error("failed to publish alive stream count to redis",
-				"key", a.streamCountKey(),
-				"alive_streams", msg.AliveStreams,
-				"reason", msg.Reason,
-				"error", err,
+				zap.String("key", a.streamCountKey()),
+				zap.Int("alive_streams", msg.AliveStreams),
+				zap.String("reason", msg.Reason),
+				zap.Error(err),
 			)
 			return
 		}
 
 		a.logger.Info("alive stream count published to redis",
-			"key", a.streamCountKey(),
-			"alive_streams", msg.AliveStreams,
-			"reason", msg.Reason,
-			"triggered_at", msg.TriggeredAt,
+			zap.String("key", a.streamCountKey()),
+			zap.Int("alive_streams", msg.AliveStreams),
+			zap.String("reason", msg.Reason),
+			zap.Time("triggered_at", msg.TriggeredAt),
 		)
 	default:
 	}

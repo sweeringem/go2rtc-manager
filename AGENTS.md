@@ -51,7 +51,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`main.go` is the entrypoint. It loads `config.yaml`, initializes the shared `slog` logger, starts the Proto.Actor system, spawns `MasterActor`, and launches the HTTP server. Keep runtime wiring there only.
+`main.go` is the entrypoint. It loads `config.yaml`, initializes the shared zap logger, starts the Proto.Actor system, spawns `MasterActor`, and launches the HTTP server. Keep runtime wiring there only.
 
 Project layout:
 
@@ -76,12 +76,13 @@ Use the standard Go toolchain from the repo root:
 
 Use Go 1.24.x for this repository. The pinned local version is Go 1.24.12.
 
-The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that starts `go2rtc-manager` plus MinIO, publishes `7181`, `9000`, and `9001`, and mounts `config.yaml`, `storage`, and `go2rtc.yaml` from the repository root. MongoDB remains external and must be configured through `config.yaml`.
+The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that starts `go2rtc-manager` plus MinIO, publishes `7181`, `9000`, and `9001`, and mounts `config.yaml`, `storage`, `logs`, and `go2rtc.yaml` from the repository root. MongoDB remains external and must be configured through `config.yaml`.
 
 ## Runtime & Configuration Notes
 Configuration is loaded through Viper. Environment overrides use the `GO2RTC_MANAGER_` prefix, with nested keys mapped using underscores. Example:
 
 - `GO2RTC_MANAGER_APP_BOX_IP=192.168.0.10`
+- `GO2RTC_MANAGER_LOG_FILE_PATH=logs/go2rtc-manager.log`
 - `GO2RTC_MANAGER_GO2RTC_BASE_URL=http://127.0.0.1:1984`
 - `GO2RTC_MANAGER_MINIO_ENDPOINT=localhost:9000`
 - `GO2RTC_MANAGER_MONGODB_URI=mongodb://localhost:27017`
@@ -90,6 +91,8 @@ Configuration is loaded through Viper. Environment overrides use the `GO2RTC_MAN
 Validation in `config/config.go` is load-bearing. Keep these constraints aligned with the implementation:
 
 - `app.box_ip` is required
+- `log.format` must be `text` or `json`
+- `log.max_size_mb`, `log.max_backups`, and `log.max_age_days` must be positive when `log.file_path` is set
 - `http.addr` is required
 - `http.read_timeout`, `http.write_timeout`, and `http.idle_timeout` must be positive
 - `go2rtc.base_url` and `go2rtc.config_path` are required
@@ -102,6 +105,7 @@ Validation in `config/config.go` is load-bearing. Keep these constraints aligned
 - `mongodb.uri`, `mongodb.database`, and `mongodb.collection` are required
 - `redis.publish_interval` must be positive whenever `redis.addr` is set
 
+Logging uses zap. Logs always go to stdout, and when `log.file_path` is set they are also written through lumberjack with size/count/age rotation.
 Cleanup scheduling is cron-based, not interval-based. `schedule.crons` can contain multiple daily run times, and each cron is interpreted in the server local timezone.
 Recording uses go2rtc `GET /api/stream.mp4?src=<cam_id>&duration=<seconds>&filename=<filename>` and stores MP4 objects in MinIO. `record.max_duration` defaults to `1h`, `record.max_concurrent_jobs` defaults to `3`, and completed/failed in-memory jobs are pruned after `record.job_retention`. `POST /record` and `GET /record/{job_id}` are allowed only when the direct client `RemoteAddr` matches `record.allowed_ips`; empty `allowed_ips` blocks all record API access.
 
@@ -144,7 +148,7 @@ Follow idiomatic Go:
 - exported identifiers only when cross-package access is required
 - `gofmt -w` on every changed Go file
 
-Prefer direct, small implementations over speculative abstractions. Keep orchestration in `MasterActor`, external I/O in dedicated actors, and shared payloads in `common/message.go`. Preserve the existing `slog` logging style with descriptive structured fields.
+Prefer direct, small implementations over speculative abstractions. Keep orchestration in `MasterActor`, external I/O in dedicated actors, and shared payloads in `common/message.go`. Preserve the existing zap logging style with descriptive structured fields.
 
 ## Testing Guidelines
 Tests already exist and should be extended when behavior changes:

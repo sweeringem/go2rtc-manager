@@ -13,13 +13,14 @@
 
 이 저장소는 Go 1.24.x를 사용합니다. 기존 저장소 가이드에서는 로컬 개발 버전으로 Go 1.24.12를 기준으로 두고 있습니다.
 
-체크인된 `Docker/Dockerfile`은 컨테이너 실행 시 `GO2RTC_MANAGER_HTTP_ADDR=:7181`를 설정하고 `7181` 포트를 expose합니다. 저장소에는 `docker-compose.yml`도 포함되어 있으며, 로컬 컨테이너 실행 시 `go2rtc-manager`와 MinIO를 함께 띄우고 `7181`, `9000`, `9001` 포트를 publish하며 저장소 루트의 `config.yaml`, `storage`, `go2rtc.yaml`를 마운트합니다. MongoDB는 외부 서비스를 사용하며 `config.yaml`에서 설정해야 합니다.
+체크인된 `Docker/Dockerfile`은 컨테이너 실행 시 `GO2RTC_MANAGER_HTTP_ADDR=:7181`를 설정하고 `7181` 포트를 expose합니다. 저장소에는 `docker-compose.yml`도 포함되어 있으며, 로컬 컨테이너 실행 시 `go2rtc-manager`와 MinIO를 함께 띄우고 `7181`, `9000`, `9001` 포트를 publish하며 저장소 루트의 `config.yaml`, `storage`, `logs`, `go2rtc.yaml`를 마운트합니다. MongoDB는 외부 서비스를 사용하며 `config.yaml`에서 설정해야 합니다.
 
 ## 런타임 및 설정 모델
 
-- `main.go`는 `config.yaml`을 로드하고, 공용 `slog` 로거를 생성한 뒤 Proto.Actor 시스템을 시작하고 `MasterActor`를 생성한 다음 HTTP 서버도 함께 시작합니다.
+- `main.go`는 `config.yaml`을 로드하고, 공용 zap 로거를 생성한 뒤 Proto.Actor 시스템을 시작하고 `MasterActor`를 생성한 다음 HTTP 서버도 함께 시작합니다.
 - 설정은 `config.Load`에서 Viper로 읽습니다. 파일 설정값은 `GO2RTC_MANAGER_` 접두사를 가진 환경 변수로 덮어쓸 수 있으며, 중첩 키는 언더스코어로 매핑됩니다. 예: `GO2RTC_MANAGER_GO2RTC_BASE_URL`, `GO2RTC_MANAGER_APP_BOX_IP`
-- `config/config.go`의 검증 로직은 실제 동작에 중요합니다. `app.box_ip`, `http.addr`, 0보다 큰 `http.read_timeout`, 0보다 큰 `http.write_timeout`, 0보다 큰 `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, 하나 이상의 유효한 `schedule.crons`, 0보다 큰 `schedule.confirmation_delay`, `snapshot.storage_dir`, 0보다 큰 `record.max_duration`, 0보다 큰 `record.job_retention`, 0보다 큰 `record.max_concurrent_jobs`, 유효한 IP/CIDR 형식의 `record.allowed_ips`, 필수 MinIO 설정, 필수 MongoDB 설정, 그리고 `redis.addr`가 설정된 경우 0보다 큰 `redis.publish_interval`이 필요합니다.
+- `config/config.go`의 검증 로직은 실제 동작에 중요합니다. `app.box_ip`, 유효한 `log.format`, `log.file_path`가 설정된 경우 0보다 큰 로그 rotation 값들, `http.addr`, 0보다 큰 `http.read_timeout`, 0보다 큰 `http.write_timeout`, 0보다 큰 `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, 하나 이상의 유효한 `schedule.crons`, 0보다 큰 `schedule.confirmation_delay`, `snapshot.storage_dir`, 0보다 큰 `record.max_duration`, 0보다 큰 `record.job_retention`, 0보다 큰 `record.max_concurrent_jobs`, 유효한 IP/CIDR 형식의 `record.allowed_ips`, 필수 MinIO 설정, 필수 MongoDB 설정, 그리고 `redis.addr`가 설정된 경우 0보다 큰 `redis.publish_interval`이 필요합니다.
+- logging은 zap을 사용합니다. 로그는 항상 stdout으로 출력되고, `log.file_path`가 설정되면 lumberjack을 통해 파일에도 기록되며 크기/개수/기간 기준으로 rotation됩니다.
 - cleanup 스케줄은 `schedule.crons`의 표준 5-field cron 문자열 목록으로 구성됩니다. 각 cron은 서버 local 시간대를 기준으로 해석되며 하루 여러 시각 실행도 가능합니다.
 - `config.yaml`은 대표적인 런타임 설정 예시이며, cleanup 스케줄러, 주기적 Redis 기록, snapshot HTTP API, MinIO MP4 녹화를 함께 표현할 수 있는 기준 설정입니다.
 

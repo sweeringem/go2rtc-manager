@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -18,7 +18,7 @@ import (
 
 type Server struct {
 	cfg        config.Config
-	logger     *slog.Logger
+	logger     *zap.Logger
 	root       *protoactor.RootContext
 	masterPID  *protoactor.PID
 	httpServer *http.Server
@@ -59,11 +59,11 @@ type recordHTTPResponse struct {
 	Error       string `json:"error,omitempty"`
 }
 
-func New(cfg config.Config, logger *slog.Logger, root *protoactor.RootContext, masterPID *protoactor.PID) *Server {
+func New(cfg config.Config, logger *zap.Logger, root *protoactor.RootContext, masterPID *protoactor.PID) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
 		cfg:                cfg,
-		logger:             logger.With("component", "httpserver"),
+		logger:             logger.With(zap.String("component", "httpserver")),
 		root:               root,
 		masterPID:          masterPID,
 		recordAllowedIPs:   parseAllowedRecordIPs(cfg.Record.AllowedIPs),
@@ -83,7 +83,7 @@ func New(cfg config.Config, logger *slog.Logger, root *protoactor.RootContext, m
 }
 
 func (s *Server) Start() error {
-	s.logger.Info("http server started", "addr", s.cfg.HTTP.Addr)
+	s.logger.Info("http server started", zap.String("addr", s.cfg.HTTP.Addr))
 	err := s.httpServer.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -147,7 +147,11 @@ func (s *Server) handleStartRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.recordAccessAllowed(r) {
-		s.logger.Warn("record access forbidden", "remote_addr", r.RemoteAddr, "method", r.Method, "path", r.URL.Path)
+		s.logger.Warn("record access forbidden",
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+		)
 		writeJSON(w, http.StatusForbidden, recordHTTPResponse{Error: "record access forbidden"})
 		return
 	}
@@ -240,7 +244,11 @@ func (s *Server) handleGetRecordJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.recordAccessAllowed(r) {
-		s.logger.Warn("record access forbidden", "remote_addr", r.RemoteAddr, "method", r.Method, "path", r.URL.Path)
+		s.logger.Warn("record access forbidden",
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+		)
 		writeJSON(w, http.StatusForbidden, recordHTTPResponse{Error: "record access forbidden"})
 		return
 	}

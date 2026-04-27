@@ -3,8 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,7 +69,7 @@ func TestHandleCaptureSnapshot(t *testing.T) {
 			WriteTimeout: 5 * time.Second,
 			IdleTimeout:  30 * time.Second,
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	body, err := json.Marshal(map[string]string{"cam_id": "TEST_P1000HDKFH"})
 	if err != nil {
@@ -113,7 +112,7 @@ func TestHandleCaptureSnapshotBadRequest(t *testing.T) {
 			WriteTimeout: 5 * time.Second,
 			IdleTimeout:  30 * time.Second,
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/snapshots", bytes.NewReader([]byte(`{"cam_id":""}`)))
 	w := httptest.NewRecorder()
@@ -144,7 +143,7 @@ func TestHandleStartRecord(t *testing.T) {
 			MaxDuration: time.Hour,
 			AllowedIPs:  []string{"192.0.2.10"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	body, err := json.Marshal(map[string]string{
 		"TYPE":     "UI",
@@ -197,7 +196,7 @@ func TestHandleStartRecordBadRequest(t *testing.T) {
 			MaxDuration: time.Hour,
 			AllowedIPs:  []string{"192.0.2.10"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"INVALID","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
 	req.RemoteAddr = "192.0.2.10:12345"
@@ -228,7 +227,7 @@ func TestHandleGetRecordJob(t *testing.T) {
 		Record: config.RecordConfig{
 			AllowedIPs: []string{"192.0.2.10"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodGet, "/record/record_20260426T063000Z_a1b2c3d4", nil)
 	req.RemoteAddr = "192.0.2.10:12345"
@@ -271,7 +270,7 @@ func TestHandleStartRecordForbiddenByRemoteAddr(t *testing.T) {
 			MaxDuration: time.Hour,
 			AllowedIPs:  []string{"192.0.2.10"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
 	req.RemoteAddr = "192.0.2.11:12345"
@@ -302,7 +301,7 @@ func TestHandleGetRecordJobForbiddenByRemoteAddr(t *testing.T) {
 		Record: config.RecordConfig{
 			AllowedIPs: []string{"192.0.2.10"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodGet, "/record/record_20260426T063000Z_a1b2c3d4", nil)
 	req.RemoteAddr = "192.0.2.11:12345"
@@ -334,7 +333,7 @@ func TestHandleStartRecordAllowsCIDR(t *testing.T) {
 			MaxDuration: time.Hour,
 			AllowedIPs:  []string{"192.0.2.0/24"},
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
 	req.RemoteAddr = "192.0.2.10:12345"
@@ -365,7 +364,7 @@ func TestHandleStartRecordForbiddenWhenAllowedIPsEmpty(t *testing.T) {
 		Record: config.RecordConfig{
 			MaxDuration: time.Hour,
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)), system.Root, masterPID)
+	}, zap.NewNop(), system.Root, masterPID)
 
 	req := httptest.NewRequest(http.MethodPost, "/record", bytes.NewReader([]byte(`{"TYPE":"UI","mac":"AB:CD:EF:DD:GG","cam_id":"TEST_P1000HDKFH","duration":"10s"}`)))
 	req.RemoteAddr = "192.0.2.10:12345"

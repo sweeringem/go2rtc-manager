@@ -1,11 +1,11 @@
 package actor
 
 import (
-	"log/slog"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
 	cron "github.com/robfig/cron/v3"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -13,7 +13,7 @@ import (
 
 type MasterActor struct {
 	config      config.Config
-	logger      *slog.Logger
+	logger      *zap.Logger
 	rootContext *protoactor.RootContext
 
 	streamCleanerPID *protoactor.PID
@@ -29,10 +29,10 @@ type MasterActor struct {
 	done             chan struct{}
 }
 
-func NewMasterActor(cfg config.Config, logger *slog.Logger, root *protoactor.RootContext) *MasterActor {
+func NewMasterActor(cfg config.Config, logger *zap.Logger, root *protoactor.RootContext) *MasterActor {
 	return &MasterActor{
 		config:      cfg,
-		logger:      logger.With("actor", "MasterActor"),
+		logger:      logger.With(zap.String("actor", "MasterActor")),
 		rootContext: root,
 		done:        make(chan struct{}),
 	}
@@ -55,7 +55,7 @@ func (a *MasterActor) Receive(ctx protoactor.Context) {
 		close(a.done)
 		a.logger.Info("master actor stopping")
 	case *common.TriggerCleanup:
-		a.logger.Info("routing cleanup trigger", "reason", msg.Reason)
+		a.logger.Info("routing cleanup trigger", zap.String("reason", msg.Reason))
 		ctx.Send(a.streamCleanerPID, &common.CleanupCycleStarted{
 			TriggeredAt: time.Now(),
 			Reason:      msg.Reason,
@@ -71,17 +71,17 @@ func (a *MasterActor) Receive(ctx protoactor.Context) {
 	case *common.StreamRemovalCompleted:
 		ctx.Send(a.streamCleanerPID, msg)
 	case *common.StreamRemoved:
-		a.logger.Warn("stream removed through go2rtc api", "stream", msg.StreamName, "removed_at", msg.RemovedAt)
+		a.logger.Warn("stream removed through go2rtc api", zap.String("stream", msg.StreamName), zap.Time("removed_at", msg.RemovedAt))
 		ctx.Send(a.actionPID, &common.ExecuteAction{
 			StreamName: msg.StreamName,
 			Action:     "stream_removed_after_double_check",
 		})
 	case *common.CleanupCycleFinished:
 		a.logger.Info("cleanup cycle summary",
-			"reason", msg.Reason,
-			"triggered_at", msg.TriggeredAt,
-			"alive_streams", msg.AliveStreams,
-			"removed_streams", msg.RemovedStreams,
+			zap.String("reason", msg.Reason),
+			zap.Time("triggered_at", msg.TriggeredAt),
+			zap.Int("alive_streams", msg.AliveStreams),
+			zap.Int("removed_streams", msg.RemovedStreams),
 		)
 		if msg.RemovedStreams == 0 {
 			return
@@ -93,7 +93,7 @@ func (a *MasterActor) Receive(ctx protoactor.Context) {
 		})
 	case *common.AliveStreamCountCalculated:
 		if msg.Error != "" {
-			a.logger.Error("periodic alive stream count failed", "reason", msg.Reason, "error", msg.Error)
+			a.logger.Error("periodic alive stream count failed", zap.String("reason", msg.Reason), zap.String("error", msg.Error))
 			return
 		}
 		ctx.Send(a.redisPID, &common.UpdateStreamCount{
@@ -137,13 +137,13 @@ func (a *MasterActor) spawnChildren(ctx protoactor.Context) {
 	}))
 
 	a.logger.Info("child actors spawned",
-		"streamCleanerPID", a.streamCleanerPID.String(),
-		"streamCountPID", a.streamCountPID.String(),
-		"go2rtcPID", a.go2rtcPID.String(),
-		"snapshotPID", a.snapshotPID.String(),
-		"recordPID", a.recordPID.String(),
-		"actionPID", a.actionPID.String(),
-		"redisPID", a.redisPID.String(),
+		zap.String("streamCleanerPID", a.streamCleanerPID.String()),
+		zap.String("streamCountPID", a.streamCountPID.String()),
+		zap.String("go2rtcPID", a.go2rtcPID.String()),
+		zap.String("snapshotPID", a.snapshotPID.String()),
+		zap.String("recordPID", a.recordPID.String()),
+		zap.String("actionPID", a.actionPID.String()),
+		zap.String("redisPID", a.redisPID.String()),
 	)
 }
 
@@ -158,7 +158,7 @@ func (a *MasterActor) startCleanupScheduler(self *protoactor.PID) {
 		if _, err := a.cleanupScheduler.AddFunc(spec, func() {
 			a.rootContext.Send(self, &common.TriggerCleanup{Reason: "scheduled"})
 		}); err != nil {
-			a.logger.Error("failed to register cleanup cron", "cron", spec, "error", err)
+			a.logger.Error("failed to register cleanup cron", zap.String("cron", spec), zap.Error(err))
 			continue
 		}
 	}
@@ -170,9 +170,9 @@ func (a *MasterActor) startCleanupScheduler(self *protoactor.PID) {
 	}
 
 	a.logger.Info("cleanup scheduler started",
-		"crons", a.config.Schedule.Crons,
-		"timezone", time.Local.String(),
-		"run_on_start", a.config.Schedule.RunOnStart,
+		zap.Strings("crons", a.config.Schedule.Crons),
+		zap.String("timezone", time.Local.String()),
+		zap.Bool("run_on_start", a.config.Schedule.RunOnStart),
 	)
 }
 
@@ -203,6 +203,6 @@ func (a *MasterActor) startRedisPublishScheduler(self *protoactor.PID) {
 	}()
 
 	a.logger.Info("redis publish scheduler started",
-		"interval", a.config.Redis.PublishInterval,
+		zap.Duration("interval", a.config.Redis.PublishInterval),
 	)
 }

@@ -1,8 +1,7 @@
 package actor
 
 import (
-	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,7 +39,7 @@ func TestSnapshotActorCaptureAndSave(t *testing.T) {
 		Snapshot: config.SnapshotConfig{
 			StorageDir: storageDir,
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, zap.NewNop())
 
 	savedPath, statusCode, err := actor.captureAndSave("TEST_P1000HDKFH")
 	if err != nil {
@@ -80,7 +79,7 @@ func TestSnapshotActorCaptureAndSaveNotFound(t *testing.T) {
 		Snapshot: config.SnapshotConfig{
 			StorageDir: t.TempDir(),
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, zap.NewNop())
 
 	_, statusCode, err := actor.captureAndSave("TEST_P1000HDKFH")
 	if err == nil {

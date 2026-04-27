@@ -2,7 +2,6 @@ package actor
 
 import (
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/config"
 )
@@ -180,5 +181,5 @@ func TestGo2RTCActorRemoveStreamUsesDeleteAPIAndBackup(t *testing.T) {
 }
 
 func newTestGo2RTCActor(cfg config.Config) *Go2RTCActor {
-	return NewGo2RTCActor(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewGo2RTCActor(cfg, zap.NewNop())
 }

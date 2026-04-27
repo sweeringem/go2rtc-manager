@@ -13,6 +13,7 @@ import (
 	"github.com/example/go2rtc-manager/config"
 	"github.com/example/go2rtc-manager/httpserver"
 	"github.com/example/go2rtc-manager/logging"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -22,19 +23,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := logging.New(cfg.Log.Level)
+	logger, err := logging.New(cfg.Log)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = logger.Sync()
+	}()
 	system := protoactor.NewActorSystem()
 	props := protoactor.PropsFromProducer(func() protoactor.Actor {
 		return actor.NewMasterActor(cfg, logger, system.Root)
 	})
 	masterPID := system.Root.Spawn(props)
 
-	logger.Info("master actor started", "pid", masterPID.String())
+	logger.Info("master actor started", zap.String("pid", masterPID.String()))
 
 	httpServer := httpserver.New(cfg, logger, system.Root, masterPID)
 	go func() {
 		if err := httpServer.Start(); err != nil && err != http.ErrServerClosed {
-			logger.Error("http server stopped with error", "error", err)
+			logger.Error("http server stopped with error", zap.Error(err))
 		}
 	}()
 
@@ -44,7 +52,7 @@ func main() {
 
 	logger.Info("shutdown signal received")
 	if err := httpServer.Shutdown(); err != nil {
-		logger.Error("http server shutdown failed", "error", err)
+		logger.Error("http server shutdown failed", zap.Error(err))
 	}
 	system.Root.Stop(masterPID)
 }

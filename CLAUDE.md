@@ -13,13 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Use Go 1.24.x in this repository. The existing repo guidance pins local development to Go 1.24.12.
 
-The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that starts `go2rtc-manager` plus MinIO, publishes `7181`, `9000`, and `9001`, and mounts `config.yaml`, `storage`, and `go2rtc.yaml` from the repository root. MongoDB remains external and must be configured through `config.yaml`.
+The checked-in `Docker/Dockerfile` sets `GO2RTC_MANAGER_HTTP_ADDR=:7181` and exposes port `7181` for container runs. The repo also includes `docker-compose.yml` for a local container run that starts `go2rtc-manager` plus MinIO, publishes `7181`, `9000`, and `9001`, and mounts `config.yaml`, `storage`, `logs`, and `go2rtc.yaml` from the repository root. MongoDB remains external and must be configured through `config.yaml`.
 
 ## Runtime and configuration model
 
-- `main.go` loads `config.yaml`, creates the shared `slog` logger, starts a Proto.Actor system, spawns `MasterActor`, and starts the HTTP server.
+- `main.go` loads `config.yaml`, creates the shared zap logger, starts a Proto.Actor system, spawns `MasterActor`, and starts the HTTP server.
 - Configuration is loaded by `config.Load` with Viper. File values can be overridden with environment variables prefixed by `GO2RTC_MANAGER_`, with nested keys mapped by underscores, e.g. `GO2RTC_MANAGER_GO2RTC_BASE_URL` and `GO2RTC_MANAGER_APP_BOX_IP`.
-- Validation in `config/config.go` is load-bearing: `app.box_ip`, `http.addr`, positive `http.read_timeout`, positive `http.write_timeout`, positive `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, one or more valid `schedule.crons` entries, positive `schedule.confirmation_delay`, `snapshot.storage_dir`, positive `record.max_duration`, positive `record.job_retention`, positive `record.max_concurrent_jobs`, valid IP/CIDR entries in `record.allowed_ips`, required MinIO settings, required MongoDB settings, and positive `redis.publish_interval` whenever `redis.addr` is set.
+- Validation in `config/config.go` is load-bearing: `app.box_ip`, valid `log.format`, positive log rotation values when `log.file_path` is set, `http.addr`, positive `http.read_timeout`, positive `http.write_timeout`, positive `http.idle_timeout`, `go2rtc.base_url`, `go2rtc.config_path`, one or more valid `schedule.crons` entries, positive `schedule.confirmation_delay`, `snapshot.storage_dir`, positive `record.max_duration`, positive `record.job_retention`, positive `record.max_concurrent_jobs`, valid IP/CIDR entries in `record.allowed_ips`, required MinIO settings, required MongoDB settings, and positive `redis.publish_interval` whenever `redis.addr` is set.
+- Logging uses zap. Logs always go to stdout, and when `log.file_path` is set they are also written through lumberjack with size/count/age rotation.
 - Cleanup scheduling is driven by `schedule.crons` using standard 5-field cron strings. Cron expressions are interpreted in the server local timezone and can represent multiple runs per day.
 - `config.yaml` is the canonical example runtime config and can enable the cleanup scheduler, periodic Redis publishing, the snapshot HTTP API, and asynchronous MP4 recording to MinIO.
 

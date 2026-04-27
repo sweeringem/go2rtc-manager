@@ -15,6 +15,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./storage:/app/storage
+      - ./logs:/app/logs
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
     depends_on:
       - minio

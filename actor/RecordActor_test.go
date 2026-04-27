@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -211,7 +211,7 @@ func TestRecordActorRejectsWhenActiveJobsReachLimit(t *testing.T) {
 
 	actor := &RecordActor{
 		config: config.Config{Record: config.RecordConfig{MaxConcurrentJobs: 1}},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: zap.NewNop(),
 		jobs: map[string]recordJob{
 			"running-job": {Status: recordStatusRunning},
 		},
@@ -368,7 +368,7 @@ func newTestRecordActor(root *protoactor.RootContext, go2rtcBaseURL string, look
 				MaxConcurrentJobs: 3,
 			},
 		},
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:      zap.NewNop(),
 		rootContext: root,
 		httpClient:  &http.Client{Timeout: 2 * time.Second},
 		lookup:      lookup,

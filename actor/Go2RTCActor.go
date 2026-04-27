@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
 	"github.com/example/go2rtc-manager/common"
@@ -22,14 +22,14 @@ import (
 
 type Go2RTCActor struct {
 	config     config.Config
-	logger     *slog.Logger
+	logger     *zap.Logger
 	httpClient *http.Client
 }
 
-func NewGo2RTCActor(cfg config.Config, logger *slog.Logger) *Go2RTCActor {
+func NewGo2RTCActor(cfg config.Config, logger *zap.Logger) *Go2RTCActor {
 	return &Go2RTCActor{
 		config: cfg,
-		logger: logger.With("actor", "Go2RTCActor"),
+		logger: logger.With(zap.String("actor", "Go2RTCActor")),
 		httpClient: &http.Client{
 			Timeout: cfg.Go2RTC.RequestTimeout,
 		},
@@ -40,13 +40,13 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *protoactor.Started:
 		a.logger.Info("go2rtc actor started",
-			"base_url", a.config.Go2RTC.BaseURL,
-			"config_path", a.config.Go2RTC.ConfigPath,
+			zap.String("base_url", a.config.Go2RTC.BaseURL),
+			zap.String("config_path", a.config.Go2RTC.ConfigPath),
 		)
 	case *common.FetchStreamList:
 		streams, err := a.listStreamNames()
 		if err != nil {
-			a.logger.Error("failed to load go2rtc streams from config", "error", err)
+			a.logger.Error("failed to load go2rtc streams from config", zap.Error(err))
 			ctx.Send(ctx.Parent(), &common.StreamListFetched{
 				TriggeredAt: msg.TriggeredAt,
 				RequestedBy: msg.RequestedBy,
@@ -64,9 +64,9 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 		hasProducer, err := a.hasProducer(msg.StreamName)
 		if err != nil {
 			a.logger.Error("failed to check stream producer",
-				"stream", msg.StreamName,
-				"attempt", msg.Attempt,
-				"error", err,
+				zap.String("stream", msg.StreamName),
+				zap.Int("attempt", msg.Attempt),
+				zap.Error(err),
 			)
 			ctx.Send(ctx.Parent(), &common.StreamHealthChecked{
 				StreamName:   msg.StreamName,
@@ -92,7 +92,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 	case *common.RemoveStream:
 		removed, err := a.removeStream(msg.StreamName)
 		if err != nil {
-			a.logger.Error("failed to remove stream through go2rtc api", "stream", msg.StreamName, "error", err)
+			a.logger.Error("failed to remove stream through go2rtc api", zap.String("stream", msg.StreamName), zap.Error(err))
 			ctx.Send(ctx.Parent(), &common.StreamRemovalCompleted{
 				StreamName:  msg.StreamName,
 				TriggeredAt: msg.TriggeredAt,
@@ -101,7 +101,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 			return
 		}
 		if !removed {
-			a.logger.Info("stream already absent in go2rtc api", "stream", msg.StreamName)
+			a.logger.Info("stream already absent in go2rtc api", zap.String("stream", msg.StreamName))
 			ctx.Send(ctx.Parent(), &common.StreamRemovalCompleted{
 				StreamName:  msg.StreamName,
 				TriggeredAt: msg.TriggeredAt,
@@ -110,7 +110,7 @@ func (a *Go2RTCActor) Receive(ctx protoactor.Context) {
 		}
 
 		removedAt := time.Now()
-		a.logger.Warn("dead stream removed through go2rtc api", "stream", msg.StreamName)
+		a.logger.Warn("dead stream removed through go2rtc api", zap.String("stream", msg.StreamName))
 		ctx.Send(ctx.Parent(), &common.StreamRemoved{
 			StreamName: msg.StreamName,
 			RemovedAt:  removedAt,

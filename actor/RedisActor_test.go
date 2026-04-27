@@ -1,8 +1,7 @@
 package actor
 
 import (
-	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 
@@ -28,7 +27,7 @@ func TestRedisActorSetAliveStreamCount(t *testing.T) {
 			Addr: redisServer.Addr(),
 			DB:   0,
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, zap.NewNop())
 
 	if err := actor.setAliveStreamCount(7); err != nil {
 		t.Fatalf("setAliveStreamCount: %v", err)

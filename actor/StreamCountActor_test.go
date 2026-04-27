@@ -1,8 +1,7 @@
 package actor
 
 import (
-	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 
@@ -39,7 +38,7 @@ func (a *go2rtcCountStubActor) Receive(ctx protoactor.Context) {
 
 type streamCountHarnessActor struct {
 	root    *protoactor.RootContext
-	logger  *slog.Logger
+	logger  *zap.Logger
 	cfg     config.Config
 	results chan *common.AliveStreamCountCalculated
 
@@ -71,7 +70,7 @@ func TestStreamCountActorCountsAliveStreams(t *testing.T) {
 	harnessPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
 		return &streamCountHarnessActor{
 			root:    system.Root,
-			logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+			logger:  zap.NewNop(),
 			cfg:     config.Config{Schedule: config.ScheduleConfig{ConfirmationDelay: time.Millisecond}},
 			results: results,
 		}

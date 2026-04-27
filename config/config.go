@@ -33,7 +33,13 @@ type AppConfig struct {
 }
 
 type LogConfig struct {
-	Level string `mapstructure:"level"`
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	FilePath   string `mapstructure:"file_path"`
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`
+	MaxBackups int    `mapstructure:"max_backups"`
+	MaxAgeDays int    `mapstructure:"max_age_days"`
+	Compress   bool   `mapstructure:"compress"`
 }
 
 type HTTPConfig struct {
@@ -114,6 +120,22 @@ func Load(path string) (Config, error) {
 
 	if cfg.App.BoxIP == "" {
 		return Config{}, fmt.Errorf("app.box_ip is required")
+	}
+	cfg.Log.Format = strings.ToLower(strings.TrimSpace(cfg.Log.Format))
+	if cfg.Log.Format != "text" && cfg.Log.Format != "json" {
+		return Config{}, fmt.Errorf("log.format must be text or json")
+	}
+	cfg.Log.FilePath = strings.TrimSpace(cfg.Log.FilePath)
+	if cfg.Log.FilePath != "" {
+		if cfg.Log.MaxSizeMB <= 0 {
+			return Config{}, fmt.Errorf("log.max_size_mb must be greater than zero when log.file_path is set")
+		}
+		if cfg.Log.MaxBackups <= 0 {
+			return Config{}, fmt.Errorf("log.max_backups must be greater than zero when log.file_path is set")
+		}
+		if cfg.Log.MaxAgeDays <= 0 {
+			return Config{}, fmt.Errorf("log.max_age_days must be greater than zero when log.file_path is set")
+		}
 	}
 	if cfg.HTTP.Addr == "" {
 		return Config{}, fmt.Errorf("http.addr is required")
@@ -203,6 +225,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.env", "local")
 	v.SetDefault("app.box_ip", "")
 	v.SetDefault("log.level", "info")
+	v.SetDefault("log.format", "json")
+	v.SetDefault("log.file_path", "")
+	v.SetDefault("log.max_size_mb", 100)
+	v.SetDefault("log.max_backups", 10)
+	v.SetDefault("log.max_age_days", 30)
+	v.SetDefault("log.compress", true)
 	v.SetDefault("http.addr", ":7181")
 	v.SetDefault("http.read_timeout", "5s")
 	v.SetDefault("http.write_timeout", "15s")

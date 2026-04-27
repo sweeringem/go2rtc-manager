@@ -1,10 +1,10 @@
 package actor
 
 import (
-	"log/slog"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -12,7 +12,7 @@ import (
 
 type StreamCountActor struct {
 	config config.Config
-	logger *slog.Logger
+	logger *zap.Logger
 
 	rootContext *protoactor.RootContext
 	go2rtcPID   *protoactor.PID
@@ -27,13 +27,13 @@ type StreamCountActor struct {
 
 func NewStreamCountActor(
 	cfg config.Config,
-	logger *slog.Logger,
+	logger *zap.Logger,
 	rootContext *protoactor.RootContext,
 	go2rtcPID *protoactor.PID,
 ) *StreamCountActor {
 	return &StreamCountActor{
 		config:      cfg,
-		logger:      logger.With("actor", "StreamCountActor"),
+		logger:      logger.With(zap.String("actor", "StreamCountActor")),
 		rootContext: rootContext,
 		go2rtcPID:   go2rtcPID,
 		pending:     make(map[string]common.StreamHealthChecked),
@@ -44,7 +44,7 @@ func (a *StreamCountActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *common.CountAliveStreamsStarted:
 		if a.running {
-			a.logger.Warn("alive stream count request ignored because previous request is still running", "reason", msg.Reason)
+			a.logger.Warn("alive stream count request ignored because previous request is still running", zap.String("reason", msg.Reason))
 			return
 		}
 		a.running = true
@@ -53,7 +53,7 @@ func (a *StreamCountActor) Receive(ctx protoactor.Context) {
 		a.triggeredAt = msg.TriggeredAt
 		a.reason = msg.Reason
 		a.aliveCount = 0
-		a.logger.Info("alive stream count started", "reason", msg.Reason, "triggered_at", msg.TriggeredAt)
+		a.logger.Info("alive stream count started", zap.String("reason", msg.Reason), zap.Time("triggered_at", msg.TriggeredAt))
 		ctx.Send(a.go2rtcPID, &common.FetchStreamList{TriggeredAt: msg.TriggeredAt, RequestedBy: ctx.Self().String()})
 	case *common.StreamListFetched:
 		if !a.running || msg.RequestedBy != ctx.Self().String() || !msg.TriggeredAt.Equal(a.triggeredAt) {
@@ -142,7 +142,7 @@ func (a *StreamCountActor) finishWithError(ctx protoactor.Context, err string) {
 	a.running = false
 	a.pending = make(map[string]common.StreamHealthChecked)
 	a.outstanding = 0
-	a.logger.Error("alive stream count failed", "reason", a.reason, "error", err)
+	a.logger.Error("alive stream count failed", zap.String("reason", a.reason), zap.String("error", err))
 	ctx.Send(ctx.Parent(), &common.AliveStreamCountCalculated{
 		TriggeredAt: a.triggeredAt,
 		Reason:      a.reason,

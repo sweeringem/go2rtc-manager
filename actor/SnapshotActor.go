@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -20,14 +20,14 @@ import (
 
 type SnapshotActor struct {
 	config     config.Config
-	logger     *slog.Logger
+	logger     *zap.Logger
 	httpClient *http.Client
 }
 
-func NewSnapshotActor(cfg config.Config, logger *slog.Logger) *SnapshotActor {
+func NewSnapshotActor(cfg config.Config, logger *zap.Logger) *SnapshotActor {
 	return &SnapshotActor{
 		config: cfg,
-		logger: logger.With("actor", "SnapshotActor"),
+		logger: logger.With(zap.String("actor", "SnapshotActor")),
 		httpClient: &http.Client{
 			Timeout: cfg.Go2RTC.RequestTimeout,
 		},
@@ -37,7 +37,7 @@ func NewSnapshotActor(cfg config.Config, logger *slog.Logger) *SnapshotActor {
 func (a *SnapshotActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *protoactor.Started:
-		a.logger.Info("snapshot actor started", "storage_dir", a.config.Snapshot.StorageDir)
+		a.logger.Info("snapshot actor started", zap.String("storage_dir", a.config.Snapshot.StorageDir))
 	case *common.CaptureSnapshotRequest:
 		savedPath, statusCode, err := a.captureAndSave(msg.CamID)
 		result := &common.CaptureSnapshotResult{
@@ -48,9 +48,9 @@ func (a *SnapshotActor) Receive(ctx protoactor.Context) {
 		}
 		if err != nil {
 			result.Error = err.Error()
-			a.logger.Error("snapshot capture failed", "cam_id", msg.CamID, "status_code", statusCode, "error", err)
+			a.logger.Error("snapshot capture failed", zap.String("cam_id", msg.CamID), zap.Int("status_code", statusCode), zap.Error(err))
 		} else {
-			a.logger.Info("snapshot captured", "cam_id", msg.CamID, "saved_path", savedPath)
+			a.logger.Info("snapshot captured", zap.String("cam_id", msg.CamID), zap.String("saved_path", savedPath))
 		}
 		ctx.Respond(result)
 	default:

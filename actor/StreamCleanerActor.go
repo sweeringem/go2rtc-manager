@@ -1,10 +1,10 @@
 package actor
 
 import (
-	"log/slog"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -12,7 +12,7 @@ import (
 
 type StreamCleanerActor struct {
 	config config.Config
-	logger *slog.Logger
+	logger *zap.Logger
 
 	rootContext *protoactor.RootContext
 	go2rtcPID   *protoactor.PID
@@ -29,14 +29,14 @@ type StreamCleanerActor struct {
 
 func NewStreamCleanerActor(
 	cfg config.Config,
-	logger *slog.Logger,
+	logger *zap.Logger,
 	rootContext *protoactor.RootContext,
 	go2rtcPID *protoactor.PID,
 	masterPID *protoactor.PID,
 ) *StreamCleanerActor {
 	return &StreamCleanerActor{
 		config:      cfg,
-		logger:      logger.With("actor", "StreamCleanerActor"),
+		logger:      logger.With(zap.String("actor", "StreamCleanerActor")),
 		rootContext: rootContext,
 		go2rtcPID:   go2rtcPID,
 		masterPID:   masterPID,
@@ -48,7 +48,7 @@ func (a *StreamCleanerActor) Receive(ctx protoactor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *common.CleanupCycleStarted:
 		if a.running {
-			a.logger.Warn("cleanup cycle ignored because previous cycle is still running", "reason", msg.Reason)
+			a.logger.Warn("cleanup cycle ignored because previous cycle is still running", zap.String("reason", msg.Reason))
 			return
 		}
 		a.running = true
@@ -58,7 +58,7 @@ func (a *StreamCleanerActor) Receive(ctx protoactor.Context) {
 		a.reason = msg.Reason
 		a.aliveCount = 0
 		a.removedCount = 0
-		a.logger.Info("cleanup cycle started", "reason", msg.Reason, "triggered_at", msg.TriggeredAt)
+		a.logger.Info("cleanup cycle started", zap.String("reason", msg.Reason), zap.Time("triggered_at", msg.TriggeredAt))
 		ctx.Send(a.go2rtcPID, &common.FetchStreamList{TriggeredAt: msg.TriggeredAt, RequestedBy: ctx.Self().String()})
 	case *common.StreamListFetched:
 		if !a.running || msg.RequestedBy != ctx.Self().String() || !msg.TriggeredAt.Equal(a.triggeredAt) {
@@ -67,7 +67,7 @@ func (a *StreamCleanerActor) Receive(ctx protoactor.Context) {
 		if msg.Error != "" {
 			a.running = false
 			a.outstanding = 0
-			a.logger.Error("cleanup cycle aborted because stream list fetch failed", "error", msg.Error)
+			a.logger.Error("cleanup cycle aborted because stream list fetch failed", zap.String("error", msg.Error))
 			return
 		}
 		if len(msg.Streams) == 0 {
@@ -111,9 +111,9 @@ func (a *StreamCleanerActor) handleStreamHealth(ctx protoactor.Context, msg *com
 	if msg.Error != "" {
 		delete(a.pending, msg.StreamName)
 		a.logger.Error("stream health check failed",
-			"stream", msg.StreamName,
-			"attempt", msg.Attempt,
-			"error", msg.Error,
+			zap.String("stream", msg.StreamName),
+			zap.Int("attempt", msg.Attempt),
+			zap.String("error", msg.Error),
 		)
 		a.markStreamCompleted(ctx)
 		return
@@ -122,7 +122,7 @@ func (a *StreamCleanerActor) handleStreamHealth(ctx protoactor.Context, msg *com
 	if msg.HasProducer {
 		delete(a.pending, msg.StreamName)
 		a.aliveCount++
-		a.logger.Info("stream healthy", "stream", msg.StreamName, "attempt", msg.Attempt)
+		a.logger.Info("stream healthy", zap.String("stream", msg.StreamName), zap.Int("attempt", msg.Attempt))
 		a.markStreamCompleted(ctx)
 		return
 	}
@@ -130,8 +130,8 @@ func (a *StreamCleanerActor) handleStreamHealth(ctx protoactor.Context, msg *com
 	if msg.Attempt == 1 {
 		a.pending[msg.StreamName] = *msg
 		a.logger.Warn("stream missing producer on first attempt",
-			"stream", msg.StreamName,
-			"confirm_after", msg.ConfirmAfter,
+			zap.String("stream", msg.StreamName),
+			zap.Duration("confirm_after", msg.ConfirmAfter),
 		)
 
 		go func(streamName string, triggeredAt time.Time, confirmAfter time.Duration, requestedBy string) {
@@ -161,12 +161,12 @@ func (a *StreamCleanerActor) handleStreamHealth(ctx protoactor.Context, msg *com
 
 func (a *StreamCleanerActor) handleStreamRemovalCompleted(ctx protoactor.Context, msg *common.StreamRemovalCompleted) {
 	if msg.Error != "" {
-		a.logger.Error("stream removal failed", "stream", msg.StreamName, "error", msg.Error)
+		a.logger.Error("stream removal failed", zap.String("stream", msg.StreamName), zap.String("error", msg.Error))
 	} else if msg.Removed {
 		a.removedCount++
-		a.logger.Info("stream removal completed", "stream", msg.StreamName, "removed_at", msg.RemovedAt)
+		a.logger.Info("stream removal completed", zap.String("stream", msg.StreamName), zap.Time("removed_at", msg.RemovedAt))
 	} else {
-		a.logger.Info("stream removal skipped because stream already absent", "stream", msg.StreamName)
+		a.logger.Info("stream removal skipped because stream already absent", zap.String("stream", msg.StreamName))
 	}
 
 	a.markStreamCompleted(ctx)
@@ -188,7 +188,7 @@ func (a *StreamCleanerActor) finishCycleIfDone(ctx protoactor.Context) {
 	}
 
 	a.running = false
-	a.logger.Info("cleanup cycle finished", "alive_streams", a.aliveCount, "reason", a.reason)
+	a.logger.Info("cleanup cycle finished", zap.Int("alive_streams", a.aliveCount), zap.String("reason", a.reason))
 	ctx.Send(ctx.Parent(), &common.CleanupCycleFinished{
 		TriggeredAt:    a.triggeredAt,
 		Reason:         a.reason,
