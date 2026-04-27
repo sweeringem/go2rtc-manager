@@ -117,7 +117,7 @@ Keep actor responsibilities narrow and consistent with the current message flow:
 - `StreamCountActor` owns count-only alive stream calculations for periodic Redis publishing and must never delete streams.
 - `Go2RTCActor` reads stream names from the go2rtc YAML config, checks producer state through `GET /api/streams?src=<name>`, optionally creates backups, and removes streams through `DELETE /api/streams?src=<name>`.
 - `SnapshotActor` captures images through `GET /api/frame.jpeg?src=<cam_id>` and writes JPEGs under `snapshot.storage_dir`.
-- `RecordActor` owns asynchronous record jobs, looks up `process`, `site`, and `group` from MongoDB by `mac`, records MP4 through go2rtc, creates a MinIO bucket from normalized `process` when absent, and uploads to `<site>/<group>/<cam_id>_<TYPE>_<timestamp>.mp4`.
+- `RecordActor` owns asynchronous record jobs, looks up `process`, `site`, and `group` from MongoDB by `mac`, records MP4 through go2rtc, creates a MinIO bucket from normalized `process` when absent, uploads to `<site>/<group>/<cam_id>_<TYPE>_<timestamp>.mp4`, and logs each successful record stage.
 - `RedisActor` publishes alive-stream counts to `stream_count@<app.box_ip>` using Redis `SET`, and supports both delete-triggered and periodic writes.
 - `ActionActor` is the post-removal hook point and currently logs follow-up actions only.
 

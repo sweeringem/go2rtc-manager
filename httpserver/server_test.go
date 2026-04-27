@@ -3,13 +3,14 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
-	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -131,6 +132,7 @@ func TestHandleStartRecord(t *testing.T) {
 	masterPID := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
 		return &snapshotResponderActor{}
 	}))
+	core, logs := observer.New(zap.InfoLevel)
 
 	server := New(config.Config{
 		HTTP: config.HTTPConfig{
@@ -143,7 +145,7 @@ func TestHandleStartRecord(t *testing.T) {
 			MaxDuration: time.Hour,
 			AllowedIPs:  []string{"192.0.2.10"},
 		},
-	}, zap.NewNop(), system.Root, masterPID)
+	}, zap.New(core), system.Root, masterPID)
 
 	body, err := json.Marshal(map[string]string{
 		"TYPE":     "UI",
@@ -174,6 +176,9 @@ func TestHandleStartRecord(t *testing.T) {
 	}
 	if response.Type != "UI" {
 		t.Fatalf("unexpected TYPE: got %s", response.Type)
+	}
+	if logs.FilterMessage("record request accepted").Len() != 1 {
+		t.Fatalf("expected record request accepted log, got %d", logs.FilterMessage("record request accepted").Len())
 	}
 }
 

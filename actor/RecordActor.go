@@ -254,6 +254,14 @@ func (a *RecordActor) handleGetRecordJob(ctx protoactor.Context, msg *common.Get
 func (a *RecordActor) executeRecord(self *protoactor.PID, job recordJob) {
 	startedAt := time.Now().UTC()
 	a.rootContext.Send(self, &recordJobRunning{JobID: job.JobID, StartedAt: startedAt})
+	a.logger.Info("record job started",
+		zap.String("job_id", job.JobID),
+		zap.String("TYPE", job.Type),
+		zap.String("mac", job.Mac),
+		zap.String("cam_id", job.CamID),
+		zap.Duration("duration", job.Duration),
+		zap.Time("started_at", startedAt),
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), job.Duration+a.config.Go2RTC.RequestTimeout+30*time.Second)
 	defer cancel()
@@ -263,6 +271,13 @@ func (a *RecordActor) executeRecord(self *protoactor.PID, job recordJob) {
 		a.failRecordJob(self, job.JobID, err)
 		return
 	}
+	a.logger.Info("record bodycam info loaded",
+		zap.String("job_id", job.JobID),
+		zap.String("mac", job.Mac),
+		zap.String("process", info.Process),
+		zap.String("site", info.Site),
+		zap.String("group", info.Group),
+	)
 
 	bucket, err := normalizeBucketName(info.Process)
 	if err != nil {
@@ -282,11 +297,21 @@ func (a *RecordActor) executeRecord(self *protoactor.PID, job recordJob) {
 		return
 	}
 	defer resp.Body.Close()
+	a.logger.Info("record stream received from go2rtc",
+		zap.String("job_id", job.JobID),
+		zap.String("cam_id", job.CamID),
+		zap.String("filename", filename),
+		zap.Int64("content_length", resp.ContentLength),
+	)
 
 	if err := a.store.EnsureBucket(ctx, bucket); err != nil {
 		a.failRecordJob(self, job.JobID, err)
 		return
 	}
+	a.logger.Info("record bucket ready",
+		zap.String("job_id", job.JobID),
+		zap.String("bucket", bucket),
+	)
 
 	size := resp.ContentLength
 	if size < 0 {
@@ -296,13 +321,22 @@ func (a *RecordActor) executeRecord(self *protoactor.PID, job recordJob) {
 		a.failRecordJob(self, job.JobID, err)
 		return
 	}
+	completedAt := time.Now().UTC()
+	a.logger.Info("record upload completed",
+		zap.String("job_id", job.JobID),
+		zap.String("bucket", bucket),
+		zap.String("object_key", objectKey),
+		zap.String("content_type", recordContentType),
+		zap.Duration("duration", job.Duration),
+		zap.Time("completed_at", completedAt),
+	)
 
 	a.rootContext.Send(self, &recordJobCompleted{
 		JobID:       job.JobID,
 		Bucket:      bucket,
 		ObjectKey:   objectKey,
 		ContentType: recordContentType,
-		CompletedAt: time.Now().UTC(),
+		CompletedAt: completedAt,
 	})
 }
 

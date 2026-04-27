@@ -73,7 +73,7 @@ The service is organized around Proto.Actor actors with message contracts centra
 3. `httpserver` allows `POST /record` and `GET /record/{job_id}` only when the direct client `RemoteAddr` matches `record.allowed_ips`; empty `allowed_ips` blocks all record API access with `403 Forbidden`.
 4. `httpserver` sends `StartRecordRequest` to `MasterActor`, which forwards it to `RecordActor`.
 5. `RecordActor` creates an in-memory job and returns `202 Accepted` with `job_id` and `accepted` status. If active `accepted`/`running` jobs have reached `record.max_concurrent_jobs`, it returns `429 Too Many Requests`.
-6. The background job looks up MongoDB `BODYCAM_INFO` by `mac`, normalizes `process` into the MinIO bucket name, records MP4 from go2rtc, creates the bucket if absent, and uploads the object.
+6. The background job looks up MongoDB `BODYCAM_INFO` by `mac`, normalizes `process` into the MinIO bucket name, records MP4 from go2rtc, creates the bucket if absent, and uploads the object. Successful record stages are logged from request acceptance through upload completion.
 7. Callers use `GET /record/{job_id}` to poll `accepted`, `running`, `completed`, or `failed`; completed jobs include `bucket`, `object_key`, and `content_type`.
 
 ## Testing focus

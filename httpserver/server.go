@@ -228,6 +228,15 @@ func (s *Server) handleStartRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Info("record request accepted",
+		zap.String("job_id", result.JobID),
+		zap.String("TYPE", result.Type),
+		zap.String("mac", result.Mac),
+		zap.String("cam_id", result.CamID),
+		zap.Duration("duration", result.Duration),
+		zap.String("remote_addr", r.RemoteAddr),
+	)
+
 	writeJSON(w, http.StatusAccepted, recordHTTPResponse{
 		JobID:    result.JobID,
 		Status:   result.Status,

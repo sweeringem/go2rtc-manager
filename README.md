@@ -405,6 +405,8 @@ GET /record/{job_id}
 - object key: `<site>/<group>/<cam_id>_<TYPE>_<record_start_time>.mp4`
 - bucket이 없으면 생성
 
+성공 경로에서는 요청 접수, job 시작, BODYCAM_INFO 조회, go2rtc 응답 수신, bucket 준비, MinIO 업로드 완료 로그를 남깁니다.
+
 bucket 이름이 S3/MinIO 규칙을 만족하지 않거나 MongoDB 문서/필수 필드가 없으면 job은 `failed` 상태가 됩니다. 완료 또는 실패한 job은 `record.job_retention` 이후 메모리에서 정리됩니다.
 
 ## 테스트

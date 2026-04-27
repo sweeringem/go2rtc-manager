@@ -73,7 +73,7 @@
 3. `httpserver`는 직접 연결한 클라이언트의 `RemoteAddr`가 `record.allowed_ips`에 매칭될 때만 `POST /record`와 `GET /record/{job_id}`를 허용합니다. 빈 `allowed_ips`는 record API 전체를 `403 Forbidden`으로 차단합니다.
 4. `httpserver`는 `StartRecordRequest`를 `MasterActor`에 보내고, `MasterActor`는 `RecordActor`로 전달합니다.
 5. `RecordActor`는 메모리 job을 만들고 `202 Accepted`와 `job_id`, `accepted` 상태를 반환합니다. `accepted`/`running` 상태의 active job 수가 `record.max_concurrent_jobs`에 도달한 경우 `429 Too Many Requests`를 반환합니다.
-6. background job은 MongoDB `BODYCAM_INFO`를 `mac`으로 조회하고, `process`를 MinIO bucket 이름으로 정규화한 뒤, go2rtc에서 MP4를 녹화하고 bucket이 없으면 생성한 다음 object를 업로드합니다.
+6. background job은 MongoDB `BODYCAM_INFO`를 `mac`으로 조회하고, `process`를 MinIO bucket 이름으로 정규화한 뒤, go2rtc에서 MP4를 녹화하고 bucket이 없으면 생성한 다음 object를 업로드합니다. 성공한 record 단계는 요청 접수부터 업로드 완료까지 로그로 남깁니다.
 7. 호출자는 `GET /record/{job_id}`로 `accepted`, `running`, `completed`, `failed` 상태를 조회합니다. 완료 상태에는 `bucket`, `object_key`, `content_type`이 포함됩니다.
 
 ## 테스트 포인트

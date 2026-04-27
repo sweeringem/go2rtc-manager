@@ -13,6 +13,7 @@ import (
 
 	protoactor "github.com/asynkron/protoactor-go/actor"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/example/go2rtc-manager/common"
 	"github.com/example/go2rtc-manager/config"
@@ -37,6 +38,7 @@ func TestRecordActorCompletesRecordJob(t *testing.T) {
 
 	store := &recordActorFakeStore{}
 	system := protoactor.NewActorSystem()
+	core, logs := observer.New(zap.InfoLevel)
 	actor := newTestRecordActor(system.Root, server.URL, recordActorFakeLookup{
 		info: bodycamInfo{
 			Process: "BODYCAM_PROD",
@@ -44,6 +46,7 @@ func TestRecordActorCompletesRecordJob(t *testing.T) {
 			Group:   "group-1",
 		},
 	}, store)
+	actor.logger = zap.New(core)
 	pid := system.Root.Spawn(protoactor.PropsFromProducer(func() protoactor.Actor {
 		return actor
 	}))
@@ -90,6 +93,18 @@ func TestRecordActorCompletesRecordJob(t *testing.T) {
 	}
 	if store.uploadedBody != "mp4-data" {
 		t.Fatalf("unexpected uploaded body: got %q", store.uploadedBody)
+	}
+
+	for _, message := range []string{
+		"record job started",
+		"record bodycam info loaded",
+		"record stream received from go2rtc",
+		"record bucket ready",
+		"record upload completed",
+	} {
+		if logs.FilterMessage(message).Len() != 1 {
+			t.Fatalf("expected %q log, got %d", message, logs.FilterMessage(message).Len())
+		}
 	}
 }
 
